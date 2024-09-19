@@ -172,7 +172,7 @@ public class TetrisPanel extends JPanel implements Runnable {
             public void actionPerformed(ActionEvent e) {
             	int[][] shape = nowBlock.getShape();
                 if (!gameOver) {
-                    hardDrop();
+
                     repaint();
                 }
             }
@@ -218,19 +218,12 @@ public class TetrisPanel extends JPanel implements Runnable {
     }
 
     void fillHold(Graphics g) {
-        int gridWidth = 4;
-        int gridHeight = 4;
-
         int startX = 25; // 가로 중앙
         int startY = 104; // 세로 중앙
 
         for (int r = 0; r < 4; r++) {
             for (int c = 0; c < 4; c++) {
-                if (grid[r][c] == 1) {
-                    g.setColor(Color.GRAY); // 쌓인 블록 색
-                } else {
-                    g.setColor(Color.BLACK); // 배경색
-                }
+                g.setColor(Color.BLACK); // 배경색
                 g.fillRect(startX + c * gridSize, startY + r * gridSize, gridSize, gridSize);
             }
         }
@@ -292,7 +285,7 @@ public class TetrisPanel extends JPanel implements Runnable {
             for (int c = 0; c < col; c++) {
                 if (grid[r][c] == 1) {
                     g.setColor(Color.GRAY); // 쌓인 블록 색
-                    Score++;
+                    
                 } else {
                     g.setColor(Color.BLACK); // 배경색
                 }
