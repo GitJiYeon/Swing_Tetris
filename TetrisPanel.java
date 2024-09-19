@@ -1,55 +1,107 @@
 package SwingTetris;
 
 import java.awt.Color;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import javax.swing.AbstractAction;
-import javax.swing.JPanel;
-import javax.swing.KeyStroke;
-import javax.swing.Timer;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 
-public class TetrisPanel extends JPanel implements ActionListener {
+import javax.swing.AbstractAction;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JPanel;
+import javax.swing.KeyStroke;
+
+public class TetrisPanel extends JPanel implements Runnable {
     int row = 20;//ㅅㄹ
     int col = 10;//ㄱㄹ
     int[][] grid = new int[row][col]; // 맵 사이즈
-    int gridSize = 30; // 한칸 사이즈
-    Timer timer; // 타이머
+    int gridSize = 30;// 한칸 사이즈
     int nowBlockRow = 0; // 블록이 있는 위치
     int nowBlockCol = col / 2; // 블록이 있는 위치(중앙 위)
     int Timerturm;
+
+    int[][] holdgrid = new int[4][4];
+    int goldgridSize = 30;
     
+    int Score = 0;
     Block nowBlock;
     Random random = new Random(); // 랜덤 블록 생성을 위한 랜덤 객체
-    
+
     // 블록 모양
     int[][] blockI = {{1, 1, 1, 1}};
-    int[][] blockT = {{1, 1, 1},{0, 1, 0}};
-    int[][] blockO = {{1, 1},{1, 1}};
-    int[][] blockL = {{1, 1},{0, 1},{0, 1}};
-    int[][] blockJ = {{1, 1},{1, 0},{1, 0}};
-    int[][] blockZ = {{1, 1},{0, 1, 1}};
-    int[][] blockS = {{0, 1, 1},{1, 1}};
-    
+    int[][] blockT = {{1, 1, 1}, {0, 1, 0}};
+    int[][] blockO = {{1, 1}, {1, 1}};
+    int[][] blockL = {{1, 1}, {0, 1}, {0, 1}};
+    int[][] blockJ = {{1, 1}, {1, 0}, {1, 0}};
+    int[][] blockZ = {{1, 1, 0}, {0, 1, 1}};
+    int[][] blockS = {{0, 1, 1}, {1, 1, 0}};
+
     Block[] blocks = {
-        new Block(blockI), new Block(blockT), new Block(blockO), 
-        new Block(blockL), new Block(blockJ), new Block(blockZ), new Block(blockS)
+            new Block(blockI, Color.CYAN),
+            new Block(blockT, Color.MAGENTA),
+            new Block(blockO, Color.YELLOW),
+            new Block(blockL, Color.ORANGE),
+            new Block(blockJ, Color.BLUE),
+            new Block(blockZ, Color.RED),
+            new Block(blockS, Color.GREEN)
     };
 
+    private List<Block> blockBag = new ArrayList<>(); // 블록 가방
+    private boolean gameOver = false; // 게임 오버 상태 변수 추가
+    private JButton restartButton; // 재시작 버튼 추가
+    private Thread gameThread; // 게임 루프를 실행할 스레드
+    private boolean running = false; // 게임 루프 실행 상태
+
     public TetrisPanel() {
-        Timerturm = 300;
-        timer = new Timer(Timerturm, this); // 300ms마다 액션퍼포머 호출
-        timer.start();
+        Timerturm = 400;
         setFocusable(true);
         requestFocusInWindow();  // 포커스를 패널로
 
-        // 처음 블록 설정
-        nowBlock = blocks[random.nextInt(blocks.length)];
-        
+        fillBlockBag(); // 초기 블록 가방 채우기
+        nowBlock = getNextBlock();
+
         // KeyBindings 설정
         setKeyBindings();
-        repaint();
+
+        // 재시작 버튼 설정
+        restartButton = new JButton("Restart");
+        restartButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                restartGame();
+            }
+        });
+        restartButton.setVisible(false); // 초기에는 버튼을 숨김
+        add(restartButton);
+
+        // 게임 시작
+        gameThread = new Thread(this);
+        startGame();
+    }
+
+    // 블록 가방 채우는 메서드
+    private void fillBlockBag() {
+        blockBag.clear();
+        List<Block> tempBlocks = new ArrayList<>();
+        for (Block block : blocks) {
+            tempBlocks.add(new Block(block.getShape(), block.getColor()));
+        }
+        Collections.shuffle(tempBlocks);
+        blockBag.addAll(tempBlocks);
+    }
+
+    private Block getNextBlock() {
+        if (blockBag.isEmpty()) {
+            fillBlockBag(); // 가방이 비었으면 다시 채우기
+        }
+        return blockBag.remove(0);
     }
 
     private void setKeyBindings() {
@@ -58,7 +110,7 @@ public class TetrisPanel extends JPanel implements ActionListener {
         this.getActionMap().put("moveLeft", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (nowBlockCol > 0 && grid[nowBlockRow][nowBlockCol - 1] == 0) {
+                if (!gameOver && canMove(nowBlockRow, nowBlockCol - 1)) {
                     nowBlockCol--;
                     repaint();
                 }
@@ -70,7 +122,7 @@ public class TetrisPanel extends JPanel implements ActionListener {
         this.getActionMap().put("moveRight", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (nowBlockCol < col - 1 && grid[nowBlockRow][nowBlockCol + 1] == 0) {
+                if (!gameOver && canMove(nowBlockRow, nowBlockCol + 1)) {
                     nowBlockCol++;
                     repaint();
                 }
@@ -82,8 +134,47 @@ public class TetrisPanel extends JPanel implements ActionListener {
         this.getActionMap().put("moveDown", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                BlockDown(); // 빠르게 떨어뜨리기
-                repaint();
+                if (!gameOver) {
+                    BlockDown(); // 빠르게 떨어뜨리기
+                    repaint();
+                }
+            }
+        });
+
+        // 위쪽 화살표 키 (회전)
+        this.getInputMap().put(KeyStroke.getKeyStroke("UP"), "rotate");
+        this.getActionMap().put("rotate", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (!gameOver) {
+                    rotateBlock();
+                    repaint();
+                }
+            }
+        });
+
+        // 스페이스 바 (하드 드롭)
+        this.getInputMap().put(KeyStroke.getKeyStroke("SPACE"), "hardDrop");
+        this.getActionMap().put("hardDrop", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (!gameOver) {
+                    hardDrop();
+                    repaint();
+                }
+            }
+        });
+        
+     // 쉬프트 (홀드)
+        this.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_SHIFT, InputEvent.SHIFT_DOWN_MASK), "Hold");
+        this.getActionMap().put("Hold", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+            	int[][] shape = nowBlock.getShape();
+                if (!gameOver) {
+                    hardDrop();
+                    repaint();
+                }
             }
         });
     }
@@ -92,39 +183,102 @@ public class TetrisPanel extends JPanel implements ActionListener {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         fill(g);
-        
-        int[][] shape = nowBlock.Getshape();
-        int startX = (getWidth() - col * gridSize) / 2; // 그리드 가로 중앙
-        int startY = (getHeight() - row * gridSize) / 2; // 그리드 세로 중앙
-        int RandomColor = (int)(Math.random()*6+1);
-        switch(RandomColor){
-        	case 1: g.setColor(new Color(0xADD8E6)); break;//하늘
-        	case 2: g.setColor(new Color(0xFFC0CB)); break;//분홍
-        	case 3: g.setColor(new Color(0xFFFACD)); break;//노랑
-        	case 4: g.setColor(new Color(0x98FB98)); break;//연두
-        	case 5: g.setColor(new Color(0xE6E6FA)); break;//보라
-        	case 6: g.setColor(new Color(0xFFDAB9)); break;//주황
+        fillHold(g);
+        fillNext(g);
+        fillScore(g);
+        if (!gameOver) {  // 게임 오버가 아닌 경우에만 블록을 그림
+            int[][] shape = nowBlock.getShape();
+            int startX = (getWidth() - col * gridSize) / 2; // 그리드 가로 중앙
+            int startY = (getHeight() - row * gridSize) / 2; // 그리드 세로 중앙
+            g.setColor(nowBlock.getColor());
+
+            for (int r = 0; r < shape.length; r++) {
+                for (int c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c] == 1) {
+                        g.fillRect(startX + (nowBlockCol + c) * gridSize, startY + (nowBlockRow + r) * gridSize, gridSize, gridSize);
+                        g.setColor(Color.LIGHT_GRAY); // 블록 테두리
+                        g.drawRect(startX + (nowBlockCol + c) * gridSize, startY + (nowBlockRow + r) * gridSize, gridSize, gridSize);
+                        g.setColor(nowBlock.getColor());
+                    }
+                }
+            }
         }
 
-        for (int r = 0; r < shape.length; r++) {
-            for (int c = 0; c < shape[r].length; c++) {
-                if (shape[r][c] == 1) {
-                    g.fillRect(startX + (nowBlockCol + c) * gridSize, startY + (nowBlockRow + r) * gridSize, gridSize, gridSize);
-                    g.setColor(Color.LIGHT_GRAY); // 블록 테두리
-                    g.drawRect(startX + (nowBlockCol + c) * gridSize, startY + (nowBlockRow + r) * gridSize, gridSize, gridSize);
-                    switch(RandomColor){
-                	case 1: g.setColor(new Color(0xADD8E6)); break;//하늘
-                	case 2: g.setColor(new Color(0xFFC0CB)); break;//분홍
-                	case 3: g.setColor(new Color(0xFFFACD)); break;//노랑
-                	case 4: g.setColor(new Color(0x98FB98)); break;//연두
-                	case 5: g.setColor(new Color(0xE6E6FA)); break;//보라
-                	case 6: g.setColor(new Color(0xFFDAB9)); break;//주황
+
+        if (gameOver) { // 게임 오버 시 메시지 출력
+            g.setColor(Color.WHITE);
+            g.setFont(new Font("Arial", Font.BOLD, 30));
+            g.drawString("Game Over", getWidth() / 2 - 100, getHeight() / 2 - 50);
+
+            restartButton.setVisible(true); // 게임 오버 시 버튼 표시
+            restartButton.setBounds(getWidth() / 2 - 50, getHeight() / 2, 100, 50);
+        } else {
+            restartButton.setVisible(false); // 게임 중에는 버튼 숨김
+        }
+    }
+
+    void fillHold(Graphics g) {
+        int gridWidth = 4;
+        int gridHeight = 4;
+
+        int startX = 25; // 가로 중앙
+        int startY = 104; // 세로 중앙
+
+        for (int r = 0; r < 4; r++) {
+            for (int c = 0; c < 4; c++) {
+                if (grid[r][c] == 1) {
+                    g.setColor(Color.GRAY); // 쌓인 블록 색
+                } else {
+                    g.setColor(Color.BLACK); // 배경색
                 }
+                g.fillRect(startX + c * gridSize, startY + r * gridSize, gridSize, gridSize);
+            }
+        }
+    }
+    void fillScore(Graphics g) {
+    	g.setColor(Color.BLACK);
+        g.setFont(new Font("Arial", Font.BOLD, 30));
+        g.drawString("Score", 513, 645);
+        g.setColor(Color.RED);
+        g.setFont(new Font("Arial", Font.BOLD, 30));
+        g.drawString(String.valueOf(Score), 542, 675);
+    }
+    
+    void fillNext(Graphics g) {
+        int startX = 490; 
+        int startY = 104; 
+        
+        int gap = 100;    // 블록들 사이의 간격
+        
+        g.setColor(Color.BLACK);
+        g.setFont(new Font("Arial", Font.BOLD, 30));
+        g.drawString("Next", 520, 97);
+        
+        for (int r = 0; r < 17; r++) {
+            for (int c = 0; c < 4; c++) {
+                g.setColor(Color.BLACK); // 배경색
+                g.fillRect(startX + c * gridSize, startY + r * gridSize, gridSize, gridSize);
+            }
+        }
+        for (int i = 0; i < 5 && i < blockBag.size(); i++) {
+            Block nextBlock = blockBag.get(i); // 다음 나올 블록들
+            int[][] shape = nextBlock.getShape();
+            g.setColor(nextBlock.getColor());
+
+            // 각 블록을 그리는 부분
+            for (int r = 0; r < shape.length; r++) {
+                for (int c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c] == 1) {
+                        g.fillRect(startX + 30 + c * gridSize, startY + i * gap + r * gridSize, gridSize, gridSize);
+                        g.setColor(Color.LIGHT_GRAY); // 블록 테두리
+                        g.drawRect(startX + 30 + c * gridSize, startY + i * gap + r * gridSize, gridSize, gridSize);
+                        g.setColor(nextBlock.getColor());
+                    }
                 }
             }
         }
     }
-
+    
     void fill(Graphics g) {
         int panelWidth = getWidth();
         int panelHeight = getHeight();
@@ -138,6 +292,7 @@ public class TetrisPanel extends JPanel implements ActionListener {
             for (int c = 0; c < col; c++) {
                 if (grid[r][c] == 1) {
                     g.setColor(Color.GRAY); // 쌓인 블록 색
+                    Score++;
                 } else {
                     g.setColor(Color.BLACK); // 배경색
                 }
@@ -149,31 +304,50 @@ public class TetrisPanel extends JPanel implements ActionListener {
     }
 
     @Override
-    public void actionPerformed(ActionEvent e) {
-        BlockDown();
-        repaint();
-    }
+    public void run() {
+        while (running) {
+            if (!gameOver) {
+                BlockDown();
+                repaint();
+            }
 
-    void BlockDown() {
-        if (Move(nowBlockRow + 1, nowBlockCol)) {
-            nowBlockRow++;
-        } else {
-            placeBlock();
-            nowBlock = blocks[random.nextInt(blocks.length)]; // 새로운 블록을 랜덤으로 설정
-            nowBlockRow = 0;
-            nowBlockCol = col / 2;
+            try {
+                Thread.sleep(Timerturm);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+                // 스레드 인터럽트 처리
+            }
         }
     }
 
-    boolean Move(int nowRow, int nowCol) {
-        int[][] shape = nowBlock.Getshape();
+    void BlockDown() {
+        if (canMove(nowBlockRow + 1, nowBlockCol)) {
+            nowBlockRow++;
+        } else {
+            placeBlock();
+            clearFullRows();
+            nowBlock = getNextBlock();
+            nowBlockRow = 0;
+            nowBlockCol = col / 2;
+            if (!canMove(nowBlockRow, nowBlockCol)) {
+                // 게임 오버 로직
+                gameOver = true; // 게임 오버 상태 설정
+                // running = false; // 게임 오버 시 스레드 종료 (선택 사항)
+                System.out.println("Game Over!");
+            }
+        }
+    }
+
+    boolean canMove(int newRow, int newCol) {
+        int[][] shape = nowBlock.getShape();
         for (int r = 0; r < shape.length; r++) {
             for (int c = 0; c < shape[r].length; c++) {
                 if (shape[r][c] == 1) {
-                    int gridRow = nowRow + r;
-                    int gridCol = nowCol + c;
-                    
-                    if (gridRow >= row || gridCol < 0 || gridCol >= col || grid[gridRow][gridCol] == 1) {
+                    int gridRow = newRow + r;
+                    int gridCol = newCol + c;
+
+                    if (gridRow >= row || gridCol < 0 || gridCol >= col ||
+                            (gridRow >= 0 && grid[gridRow][gridCol] == 1)) {
                         return false;
                     }
                 }
@@ -183,7 +357,7 @@ public class TetrisPanel extends JPanel implements ActionListener {
     }
 
     void placeBlock() {
-        int[][] shape = nowBlock.Getshape();
+        int[][] shape = nowBlock.getShape();
         for (int r = 0; r < shape.length; r++) {
             for (int c = 0; c < shape[r].length; c++) {
                 if (shape[r][c] == 1) {
@@ -192,17 +366,120 @@ public class TetrisPanel extends JPanel implements ActionListener {
             }
         }
     }
+
+    void rotateBlock() {
+        int[][] currentShape = nowBlock.getShape();
+        int[][] rotatedShape = new int[currentShape[0].length][currentShape.length];
+
+        for (int r = 0; r < currentShape.length; r++) {
+            for (int c = 0; c < currentShape[0].length; c++) {
+                rotatedShape[c][currentShape.length - 1 - r] = currentShape[r][c];
+            }
+        }
+
+        if (canPlaceRotatedBlock(rotatedShape)) {
+            nowBlock.setShape(rotatedShape);
+        }
+    }
+
+    boolean canPlaceRotatedBlock(int[][] rotatedShape) {
+        for (int r = 0; r < rotatedShape.length; r++) {
+            for (int c = 0; c < rotatedShape[r].length; c++) {
+                if (rotatedShape[r][c] == 1) {
+                    int gridRow = nowBlockRow + r;
+                    int gridCol = nowBlockCol + c;
+
+                    if (gridRow >= row || gridCol < 0 || gridCol >= col ||
+                            (gridRow >= 0 && grid[gridRow][gridCol] == 1)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    void clearFullRows() {
+        for (int r = row - 1; r >= 0; r--) {
+            boolean fullRow = true;
+            for (int c = 0; c < col; c++) {
+                if (grid[r][c] == 0) {
+                    fullRow = false;
+                    break;
+                }
+            }
+            if (fullRow) {
+            	Score += 3;
+                for (int i = r; i > 0; i--) {
+                    System.arraycopy(grid[i - 1], 0, grid[i], 0, col);
+                }
+                for (int c = 0; c < col; c++) {
+                    grid[0][c] = 0;
+                }
+                r++; // 같은 행을 다시 확인
+            }
+        }
+    }
+
+    void hardDrop() {
+        while (canMove(nowBlockRow + 1, nowBlockCol)) {
+            nowBlockRow++;
+        }
+        placeBlock();
+        clearFullRows();
+        nowBlock = getNextBlock();
+        nowBlockRow = 0;
+        nowBlockCol = col / 2;
+        if (!canMove(nowBlockRow, nowBlockCol)) {
+            // 게임 오버 로직
+            gameOver = true; // 게임 오버 상태 설정
+            // running = false; // 게임 오버 시 스레드 종료 (선택 사항)
+            System.out.println("Game Over!");
+        }
+    }
+
+    // 게임 재시작 메서드
+    private void restartGame() {
+        gameOver = false;
+        grid = new int[row][col];
+        nowBlockRow = 0;
+        nowBlockCol = col / 2;
+        nowBlock = getNextBlock();
+        requestFocusInWindow(); // 게임 패널에 포커스 설정
+        startGame(); // 게임 루프 다시 시작
+        repaint();
+    }
+
+    // 게임 시작 메서드
+    public void startGame() {
+    	Score = 0;
+        if (!running) {
+            running = true;
+            gameThread = new Thread(this);
+            gameThread.start();
+        }
+    }
 }
 
 // 블록들
 class Block {
-    int[][] shape;
+    private int[][] shape;
+    private Color color;
 
-    public Block(int[][] shape) {
+    public Block(int[][] shape, Color color) {
         this.shape = shape;
+        this.color = color;
     }
 
-    public int[][] Getshape() {
+    public int[][] getShape() {
         return shape;
+    }
+
+    public void setShape(int[][] newShape) {
+        this.shape = newShape;
+    }
+
+    public Color getColor() {
+        return color;
     }
 }

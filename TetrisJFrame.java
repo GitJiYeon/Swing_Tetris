@@ -5,7 +5,7 @@ import javax.swing.JFrame;
 public class TetrisJFrame extends JFrame {
     public TetrisJFrame() {
         setTitle("Tetris");
-        setSize(600, 800);
+        setSize(650, 850);
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
