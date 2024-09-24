@@ -30,8 +30,8 @@ public class TetrisPanel extends JPanel implements Runnable {
     int[][] holdBlock;
     int[][] holdgrid = new int[4][4];
     int goldgridSize = 30;
-    
-    int BlockHave; //홀드에 블럭이 있는지 확인
+
+    //int BlockHave; //홀드에 블럭이 있는지 확인 -> 불필요한 변수 제거
     Color HoldBlockColor;
     int Score = 0;
     Block nowBlock;
@@ -61,6 +61,8 @@ public class TetrisPanel extends JPanel implements Runnable {
     private JButton restartButton; // 재시작 버튼 추가
     private Thread gameThread; // 게임 루프를 실행할 스레드
     private boolean running = false; // 게임 루프 실행 상태
+
+    private boolean holdUsed = false; // 한 턴에 한 번만 홀드 사용 가능하도록 플래그 변수 추가
 
     public TetrisPanel() {
         Timerturm = 400;
@@ -167,17 +169,16 @@ public class TetrisPanel extends JPanel implements Runnable {
                 }
             }
         });
-        
 
-     // 쉬프트 (홀드)
+
+        // 쉬프트 (홀드)
         this.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_SHIFT, InputEvent.SHIFT_DOWN_MASK), "Hold");
         this.getActionMap().put("Hold", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-            	int[][] shape = nowBlock.getShape();
-            	BlockHave = 1;
+                int[][] shape = nowBlock.getShape();
                 if (!gameOver) {
-                	Hold();
+                    Hold();
                     repaint();
                 }
             }
@@ -231,7 +232,7 @@ public class TetrisPanel extends JPanel implements Runnable {
         g.fillRect(startX, startY, 4 * gridSize, 4 * gridSize);
 
         if (holdBlock != null) { // qmffhrdl dlTdmaus
-        	g.setColor(HoldBlockColor);  //holdBlock 색
+            g.setColor(HoldBlockColor);  //holdBlock 색
             int[][] shape = holdBlock;
 
             for (int r = 0; r < shape.length; r++) {
@@ -249,27 +250,27 @@ public class TetrisPanel extends JPanel implements Runnable {
 
 
     void fillScore(Graphics g) {
-    	g.setColor(Color.BLACK);
+        g.setColor(Color.BLACK);
         g.setFont(new Font("Arial", Font.BOLD, 30));
         g.drawString("Score", 513, 645);
         g.setColor(Color.RED);
         g.setFont(new Font("Arial", Font.BOLD, 30));
         g.drawString(String.valueOf(Score), 542, 675);
     }
-    
+
     void fillNext(Graphics g) {
-        int startX = 490; 
-        int startY = 104; 
+        int startX = 490;
+        int startY = 104;
         int blockSize = 27;
         int gap = 100;    //간격
-        
+
         g.setColor(Color.BLACK);
         g.setFont(new Font("Arial", Font.BOLD, 30));
         g.drawString("Next", 520, 97);
-        
+
         for (int r = 0; r < 17; r++) {
             for (int c = 0; c < 4; c++) {
-                g.setColor(Color.BLACK); 
+                g.setColor(Color.BLACK);
                 g.fillRect(startX + c * gridSize, startY + r * gridSize, gridSize, gridSize);
             }
         }
@@ -291,7 +292,7 @@ public class TetrisPanel extends JPanel implements Runnable {
             }
         }
     }
-    
+
     void fill(Graphics g) {
         int panelWidth = getWidth();
         int panelHeight = getHeight();
@@ -305,7 +306,7 @@ public class TetrisPanel extends JPanel implements Runnable {
             for (int c = 0; c < col; c++) {
                 if (grid[r][c] == 1) {
                     g.setColor(Color.GRAY); // 쌓인 블록 색
-                    
+
                 } else {
                     g.setColor(Color.BLACK); // 배경색
                 }
@@ -342,6 +343,8 @@ public class TetrisPanel extends JPanel implements Runnable {
             nowBlock = getNextBlock();
             nowBlockRow = 0;
             nowBlockCol = col / 2;
+            holdUsed = false; // 새로운 블록이 나올 때마다 홀드 초기화 // 새로운 블록이 나올 때마다 홀드 초기화
+
             if (!canMove(nowBlockRow, nowBlockCol)) {
                 // 게임 오버 로직
                 gameOver = true; // 게임 오버 상태 설정
@@ -371,6 +374,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 
     void placeBlock() {
         int[][] shape = nowBlock.getShape();
+        Score++;
         for (int r = 0; r < shape.length; r++) {
             for (int c = 0; c < shape[r].length; c++) {
                 if (shape[r][c] == 1) {
@@ -413,27 +417,26 @@ public class TetrisPanel extends JPanel implements Runnable {
     }
 
     void Hold() {
-        if (BlockHave == 0) { //블럭이 없으면
-            holdBlock = nowBlock.getShape(); //현재 블록저장
-            HoldBlockColor = nowBlock.getColor(); //현재 블록색 저장
-            nowBlock = getNextBlock(); //새로운 블록 현재 블록으로 변경
+        if (!holdUsed) { // 한 턴에 한 번만 홀드 가능
+            if (holdBlock == null) { // 홀드 슬롯이 비어있는 경우
+                holdBlock = nowBlock.getShape();
+                HoldBlockColor = nowBlock.getColor();
+                nowBlock = getNextBlock();
+            } else { // 홀드 슬롯에 이미 블록이 있는 경우
+                int[][] tempBlock = holdBlock;
+                Color tempColor = HoldBlockColor;
+                holdBlock = nowBlock.getShape();
+                HoldBlockColor = nowBlock.getColor();
+                nowBlock = new Block(tempBlock, tempColor);
+            }
             nowBlockRow = 0;
             nowBlockCol = col / 2;
-            BlockHave = 1;
-        } else { // 블럭이 있으면
-            int[][] tempBlock = holdBlock; //홀드 블록을 임시 저장
-            Color tempColor = HoldBlockColor; //홀드블록 색을 임시 저장
-            holdBlock = nowBlock.getShape(); //현재블록을 홀드에 저장
-            HoldBlockColor = nowBlock.getColor(); //현재블록색을 홀드에 저장
-            nowBlock = new Block(tempBlock, tempColor); //홀드블록을 현재블록으로 변경
-            nowBlockRow = 0;
-            nowBlockCol = col / 2;
+            holdUsed = true; // 홀드 사용 표시
         }
-        repaint(); // 화면 다시 그리기
     }
 
 
-    
+
     void clearFullRows() {
         for (int r = row - 1; r >= 0; r--) {
             boolean fullRow = true;
@@ -444,7 +447,7 @@ public class TetrisPanel extends JPanel implements Runnable {
                 }
             }
             if (fullRow) {
-            	Score += 3;
+                Score += 3;
                 for (int i = r; i > 0; i--) {
                     System.arraycopy(grid[i - 1], 0, grid[i], 0, col);
                 }
@@ -465,6 +468,7 @@ public class TetrisPanel extends JPanel implements Runnable {
         nowBlock = getNextBlock();
         nowBlockRow = 0;
         nowBlockCol = col / 2;
+        holdUsed = false; // 새로운 블록이 나올 때마다 홀드 초기화
         if (!canMove(nowBlockRow, nowBlockCol)) {
             // 게임 오버 로직
             gameOver = true; // 게임 오버 상태 설정
@@ -487,10 +491,10 @@ public class TetrisPanel extends JPanel implements Runnable {
 
     // 게임 시작 메서드
     public void startGame() {
-    	BlockHave = 0;
-    	holdBlock = null;
-    	HoldBlockColor = null;
-    	Score = 0;
+        //BlockHave = 0; -> 불필요한 변수 제거
+        holdBlock = null;
+        HoldBlockColor = null;
+        Score = 0;
         if (!running) {
             running = true;
             gameThread = new Thread(this);
