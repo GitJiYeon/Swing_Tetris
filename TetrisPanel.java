@@ -7,10 +7,12 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.Timer;
 
 import javax.swing.AbstractAction;
 import javax.swing.JButton;
@@ -18,7 +20,7 @@ import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 
-public class TetrisPanel extends JPanel implements Runnable {
+public class TetrisPanel extends JPanel implements Runnable{
     int row = 20;//ㅅㄹ
     int col = 10;//ㄱㄹ
     int[][] grid = new int[row][col]; // 맵 사이즈
@@ -63,9 +65,9 @@ public class TetrisPanel extends JPanel implements Runnable {
     private boolean running = false; // 게임 루프 실행 상태
 
     private boolean holdUsed = false; // 한 턴에 한 번만 홀드 사용 가능하도록 플래그 변수 추가
-
+    
     public TetrisPanel() {
-        Timerturm = 400;
+        Timerturm = 600;
         setFocusable(true);
         requestFocusInWindow();  // 포커스를 패널로
 
@@ -89,6 +91,8 @@ public class TetrisPanel extends JPanel implements Runnable {
         // 게임 시작
         gameThread = new Thread(this);
         startGame();
+        
+        this.requestFocusInWindow();
     }
 
     // 블록 가방 채우는 메서드
@@ -157,6 +161,17 @@ public class TetrisPanel extends JPanel implements Runnable {
                 }
             }
         });
+     // z 키 (회전)
+        this.getInputMap().put(KeyStroke.getKeyStroke("Z"), "counterclockwiserotate");
+        this.getActionMap().put("counterclockwiserotate", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (!gameOver) {
+                	counterclockwiserotateBlock();
+                    repaint();
+                }
+            }
+        });
 
         // 스페이스 바 (하드 드롭)
         this.getInputMap().put(KeyStroke.getKeyStroke("SPACE"), "hardDrop");
@@ -192,6 +207,32 @@ public class TetrisPanel extends JPanel implements Runnable {
         fillHold(g);
         fillNext(g);
         fillScore(g);
+        
+        if (!gameOver) {
+            int ghostRow = findGhostRow();
+            int[][] shape = nowBlock.getShape();
+            int startX = (getWidth() - col * gridSize) / 2; 
+            int startY = (getHeight() - row * gridSize) / 2; 
+
+            Color currentColor = nowBlock.getColor();
+            // R, G, B, 투명도값 0 ~ 225
+            Color transparentColor = new Color(currentColor.getRed(), currentColor.getGreen(), currentColor.getBlue(), 90);
+            g.setColor(transparentColor);
+
+            for (int r = 0; r < shape.length; r++) {
+                for (int c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c] == 1) {
+                        g.fillRect(startX + (nowBlockCol + c) * gridSize, startY + (ghostRow + r) * gridSize, gridSize, gridSize);
+                        
+                        // 유령블록 테투리
+                        g.setColor(Color.YELLOW); 
+                        g.drawRect(startX + (nowBlockCol + c) * gridSize, startY + (ghostRow + r) * gridSize, gridSize, gridSize);
+                        g.setColor(transparentColor);
+                    }
+                }
+            }
+        }
+        
         if (!gameOver) {  // 게임 오버가 아닌 경우에만 블록을 그림
             int[][] shape = nowBlock.getShape();
             int startX = (getWidth() - col * gridSize) / 2; // 그리드 가로 중앙
@@ -202,7 +243,7 @@ public class TetrisPanel extends JPanel implements Runnable {
                 for (int c = 0; c < shape[r].length; c++) {
                     if (shape[r][c] == 1) {
                         g.fillRect(startX + (nowBlockCol + c) * gridSize, startY + (nowBlockRow + r) * gridSize, gridSize, gridSize);
-                        g.setColor(Color.LIGHT_GRAY); // 블록 테두리
+                        g.setColor(Color.WHITE); // 블록 테두리
                         g.drawRect(startX + (nowBlockCol + c) * gridSize, startY + (nowBlockRow + r) * gridSize, gridSize, gridSize);
                         g.setColor(nowBlock.getColor());
                     }
@@ -223,6 +264,16 @@ public class TetrisPanel extends JPanel implements Runnable {
         }
     }
 
+
+    int findGhostRow() {//유령블록
+        int ghostRow = nowBlockRow;
+        while (canMove(ghostRow + 1, nowBlockCol)) {
+            ghostRow++;
+        }
+        return ghostRow;
+    }
+    
+    
     void fillHold(Graphics g) {
         int startX = 25; // 홀드 블록 그리기 시작 X 좌표
         int startY = 104; // 홀드 블록 그리기 시작 Y 좌표
@@ -239,7 +290,7 @@ public class TetrisPanel extends JPanel implements Runnable {
                 for (int c = 0; c < shape[r].length; c++) {
                     if (shape[r][c] == 1) {
                         g.fillRect(startX + c * gridSize, startY + r * gridSize, gridSize, gridSize);
-                        g.setColor(Color.LIGHT_GRAY); // 블록 테두리
+                        g.setColor(Color.WHITE); // 블록 테두리
                         g.drawRect(startX + c * gridSize, startY + r * gridSize, gridSize, gridSize);
                         g.setColor(HoldBlockColor);
                     }
@@ -293,6 +344,15 @@ public class TetrisPanel extends JPanel implements Runnable {
         }
     }
 
+    Color[][] colors = new Color[row][col];
+
+    // 블록이 쌓일 때 색상 저장
+    void placeBlock(int r, int c, Color color) {
+        grid[r][c] = 1; // 블록 위치 표시
+        colors[r][c] = color; // 색상 저장
+    }
+
+    // 그래픽을 그릴 때 색상을 표시
     void fill(Graphics g) {
         int panelWidth = getWidth();
         int panelHeight = getHeight();
@@ -304,15 +364,17 @@ public class TetrisPanel extends JPanel implements Runnable {
 
         for (int r = 0; r < row; r++) {
             for (int c = 0; c < col; c++) {
+                // 쌓인 블록 색상으로 채우기
                 if (grid[r][c] == 1) {
-                    g.setColor(Color.GRAY); // 쌓인 블록 색
-
+                    // 쌓인 블록의 색상 사용
+                    g.setColor(colors[r][c]); // 색상 사용
                 } else {
                     g.setColor(Color.BLACK); // 배경색
                 }
                 g.fillRect(startX + c * gridSize, startY + r * gridSize, gridSize, gridSize);
-                g.setColor(Color.GRAY);
+                g.setColor(Color.GRAY); // 격자무늬 / 쌓인블럭
                 g.drawRect(startX + c * gridSize, startY + r * gridSize, gridSize, gridSize);
+                //g.setColor(colors[r][c]);
             }
         }
     }
@@ -343,7 +405,7 @@ public class TetrisPanel extends JPanel implements Runnable {
             nowBlock = getNextBlock();
             nowBlockRow = 0;
             nowBlockCol = col / 2;
-            holdUsed = false; // 새로운 블록이 나올 때마다 홀드 초기화 // 새로운 블록이 나올 때마다 홀드 초기화
+            holdUsed = false; // 새로운 블록이 나올 때마다 홀드 초기화
 
             if (!canMove(nowBlockRow, nowBlockCol)) {
                 // 게임 오버 로직
@@ -398,6 +460,21 @@ public class TetrisPanel extends JPanel implements Runnable {
             nowBlock.setShape(rotatedShape);
         }
     }
+    void counterclockwiserotateBlock() {
+        int[][] currentShape = nowBlock.getShape();
+        int[][] rotatedShape = new int[currentShape[0].length][currentShape.length];
+
+        for (int r = currentShape.length-1; r >= 0; r--) {
+            for (int c = currentShape[0].length-1; c >= 0 ; c--) {
+            	rotatedShape[currentShape[0].length - 1 - c][r] = currentShape[r][c];
+
+            }
+        }
+
+        if (canPlaceRotatedBlock(rotatedShape)) {
+            nowBlock.setShape(rotatedShape);
+        }
+    }
 
     boolean canPlaceRotatedBlock(int[][] rotatedShape) {
         for (int r = 0; r < rotatedShape.length; r++) {
@@ -434,7 +511,6 @@ public class TetrisPanel extends JPanel implements Runnable {
             holdUsed = true; // 홀드 사용 표시
         }
     }
-
 
 
     void clearFullRows() {
