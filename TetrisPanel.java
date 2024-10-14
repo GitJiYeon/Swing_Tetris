@@ -96,6 +96,7 @@ public class TetrisPanel extends JPanel implements Runnable{
         
         this.requestFocusInWindow();
     }
+    
 
     // 블록 가방 채우는 메서드
     private void fillBlockBag() {
@@ -284,7 +285,7 @@ public class TetrisPanel extends JPanel implements Runnable{
     
     
     void fillHold(Graphics g) {
-        int startX = 25; // 홀드 블록 그리기 시작 X 좌표
+        int startX = 30; // 홀드 블록 그리기 시작 X 좌표
         int startY = 104; // 홀드 블록 그리기 시작 Y 좌표
         
         g.setColor(Color.BLACK);
@@ -321,7 +322,7 @@ public class TetrisPanel extends JPanel implements Runnable{
     }
     
     void fillNext(Graphics g) {
-        int startX = 490;
+        int startX = 500;
         int startY = 104;
         int blockSize = 27;
         int gap = 100;    //간격
@@ -467,51 +468,113 @@ public class TetrisPanel extends JPanel implements Runnable{
             }
         }
     }
-
+    
     void rotateBlock() {
-    	
         int[][] currentShape = nowBlock.getShape();
         int[][] rotatedShape = new int[currentShape[0].length][currentShape.length];
 
+        // 회전 로직 (시계 방향)
         for (int r = 0; r < currentShape.length; r++) {
             for (int c = 0; c < currentShape[0].length; c++) {
-                rotatedShape[c][currentShape.length -1 - r] = currentShape[r][c];
+                rotatedShape[c][currentShape.length - 1 - r] = currentShape[r][c];
             }
         }
 
+        // SRS 벽 킥 시도
         if (canPlaceRotatedBlock(rotatedShape)) {
             nowBlock.setShape(rotatedShape);
+        } else if (attemptWallKick(rotatedShape)) {
+            nowBlock.setShape(rotatedShape);
         }
-        
-        
-        
     }
+
     void counterclockwiserotateBlock() {
         int[][] currentShape = nowBlock.getShape();
         int[][] rotatedShape = new int[currentShape[0].length][currentShape.length];
 
-        for (int r = currentShape.length-1; r >= 0; r--) {
-            for (int c = currentShape[0].length-1; c >= 0 ; c--) {
-            	rotatedShape[currentShape[0].length -1 - c][r] = currentShape[r][c];
-
+        // 반시계 회전 로직
+        for (int r = currentShape.length - 1; r >= 0; r--) {
+            for (int c = currentShape[0].length - 1; c >= 0; c--) {
+                rotatedShape[currentShape[0].length - 1 - c][r] = currentShape[r][c];
             }
         }
 
+        // SRS 벽 킥 시도
         if (canPlaceRotatedBlock(rotatedShape)) {
             nowBlock.setShape(rotatedShape);
+        } else if (attemptWallKick(rotatedShape)) {
+            nowBlock.setShape(rotatedShape);
+        }
+    }
 
-            // 회전이 성공했을 때 T-스핀인지 확인
-            if (isTSpin(rotatedShape)) {
-                System.out.println("T-Spin detected! Bonus points awarded.");
-                // T-스핀 보너스 점수 처리 로직
-                Score += 500; // 예시로 보너스 점수 추가
+ // I 미노 회전 시 벽 킥 시도
+    boolean attemptWallKick(int[][] rotatedShape) {
+        int[][] kicks;
+
+        // I 미노 전용 벽 킥 패턴 (시계 방향 회전 기준)
+        if (nowBlock.isImino()) {
+            // I 미노가 위아래로 긴 상태에서 오른쪽 끝에 있을 때
+            if (nowBlockCol + nowBlock.getShape()[0].length >= col) {
+                // 네 칸 왼쪽으로 이동 (가로로 긴 모양이 되도록)
+                int newCol = nowBlockCol - 3; // 네 칸 왼쪽 이동
+
+                // 그리드 경계를 벗어나지 않도록 확인
+                if (newCol >= 0) {
+                    nowBlockCol = newCol; // 위치 업데이트
+                    return true; // 성공적으로 이동
+                }
+            }
+
+            // I 미노 전용 벽 킥 패턴 (시계 방향)
+            kicks = new int[][]{
+                {0, 0}, {0, -2}, {0, 2}, {1, -2}, {-1, 2}
+            };
+        } else {
+            // 다른 블록의 벽 킥 패턴
+            kicks = new int[][]{
+                {0, 0}, {0, -1}, {0, 1}, {-1, 0}, {1, 0}
+            };
+        }
+
+        // 벽 킥 시도
+        for (int[] kick : kicks) {
+            int newRow = nowBlockRow + kick[0];
+            int newCol = nowBlockCol + kick[1];
+
+            // 그리드 경계를 벗어나지 않도록 확인
+            if (newCol >= 0 && newCol + rotatedShape[0].length <= col) {
+                if (checkBlockPlacement(rotatedShape, newRow, newCol)) {
+                    nowBlockRow = newRow;
+                    nowBlockCol = newCol;
+                    return true;
+                }
             }
         }
-        
 
-        
+        return false; // 벽 킥 실패
     }
-    
+
+
+
+
+
+    // T-스핀 감지
+    boolean isTSpin(int[][] rotatedShape) {
+        // T-블록의 중앙 좌표를 기준으로 회전 시 주변 3곳이 막혀 있는지 확인
+        int centerRow = nowBlockRow + 1; // T-블록의 중앙 부분 위치
+        int centerCol = nowBlockCol + 1;
+
+        int blockedCount = 0;
+
+        // 중심 주변 4개의 좌표 중 3개가 막혀 있으면 T-스핀 가능
+        if (centerRow > 0 && grid[centerRow - 1][centerCol] == 1) blockedCount++; // 위쪽 확인
+        if (centerCol > 0 && grid[centerRow][centerCol - 1] == 1) blockedCount++; // 왼쪽 확인
+        if (centerCol < col - 1 && grid[centerRow][centerCol + 1] == 1) blockedCount++; // 오른쪽 확인
+        if (centerRow < row - 1 && grid[centerRow + 1][centerCol] == 1) blockedCount++; // 아래쪽 확인
+
+        return blockedCount >= 3; // 3곳이 막혀 있을 경우 T-스핀
+    }
+
     boolean canPlaceRotatedBlock(int[][] rotatedShape) {
         // 기본 위치에서 확인
         if (checkBlockPlacement(rotatedShape, nowBlockRow, nowBlockCol)) {
@@ -530,24 +593,18 @@ public class TetrisPanel extends JPanel implements Runnable{
             }
         }
         
-        
-        // 모두 실패하면 false 반환
+        // 회전된 블록이 놓일 수 있는 공간을 추가로 확인
+        int[][] additionalKicks = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}}; // 대각선 킥
+        for (int[] kick : additionalKicks) {
+            int newRow = nowBlockRow + kick[0];
+            int newCol = nowBlockCol + kick[1];
+            if (checkBlockPlacement(rotatedShape, newRow, newCol)) {
+                nowBlockRow = newRow;  // 위치 업데이트
+                nowBlockCol = newCol;
+                return true;
+            }
+        }
         return false;
-    }
-    boolean isTSpin(int[][] rotatedShape) {
-        // T-블록의 중앙 좌표를 기준으로 회전 시 주변 3곳이 막혀 있는지 확인
-        int centerRow = nowBlockRow + 1; // T-블록의 중앙 부분 위치
-        int centerCol = nowBlockCol + 1;
-
-        int blockedCount = 0;
-
-        // 중심 주변 4개의 좌표 중 3개가 막혀 있으면 T-스핀 가능
-        if (centerRow > 0 && grid[centerRow - 1][centerCol] == 1) blockedCount++; // 위쪽 확인
-        if (centerCol > 0 && grid[centerRow][centerCol - 1] == 1) blockedCount++; // 왼쪽 확인
-        if (centerCol < col - 1 && grid[centerRow][centerCol + 1] == 1) blockedCount++; // 오른쪽 확인
-        if (centerRow < row - 1 && grid[centerRow + 1][centerCol] == 1) blockedCount++; // 아래쪽 확인
-
-        return blockedCount >= 3; // 3곳이 막혀 있을 경우 T-스핀
     }
 
     boolean checkBlockPlacement(int[][] shape, int rowOffset, int colOffset) {
@@ -690,6 +747,11 @@ public class TetrisPanel extends JPanel implements Runnable{
 class Block {
     private int[][] shape;
     private Color color;
+ // I 미노인지 확인하는 메서드 (블록 클래스에서)
+    boolean isImino() {
+        // I 미노는 4x1 또는 1x4 크기임
+        return (shape.length == 4 && shape[0].length == 1) || (shape.length == 1 && shape[0].length == 4);
+    }
 
     public Block(int[][] shape, Color color) {
         this.shape = shape;
