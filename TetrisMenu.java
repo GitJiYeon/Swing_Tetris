@@ -13,7 +13,7 @@ public class TetrisMenu extends JFrame {
     private JPanel menuPanel;
     private JButton startButton;
     private TetrisPanel game;
-    private Image backgroundImage; // 배경 이미지를 저장할 변수
+    private Image backgroundImage; // 배경 이미지 저장
 
     public TetrisMenu() {
         setTitle("Tetris");
@@ -24,7 +24,7 @@ public class TetrisMenu extends JFrame {
 
         // 배경 이미지 로드
         try {
-            backgroundImage = ImageIO.read(new File("C:\\Users\\jyhan\\Desktop\\미림\\전공\\자바\\ECLIPSE_JAVATEST\\SwingTetris\\src\\images\\tetrisMenu.png"));
+            backgroundImage = ImageIO.read(new File("./src/images/tetrisMenu.png"));
         } catch (IOException e) {
             e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
         }
