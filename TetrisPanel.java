@@ -7,11 +7,16 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.Timer;
 
 import javax.swing.AbstractAction;
 import javax.swing.JButton;
@@ -35,6 +40,9 @@ public class TetrisPanel extends JPanel implements Runnable {
 	Color HoldBlockColor;
 	Block nowBlock;
 	Random random = new Random(); // 랜덤 블록 생성을 위한 랜덤 객체
+
+	private static final String HIGH_SCORE_FILE = "highscore.txt"; // 최고 기록 저장 파일 이름
+	private int highScore = 0; // 최고 기록 변수
 
 	int Score = 0;
 	int tetrisCount = 0;
@@ -62,7 +70,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 	private JButton diffButton;
 	long lastAttackTime = 0; // 마지막 공격 발생 시간 저장
 	int attackInterval = 10000; // 15초 간격으로 공격
-	
+
 	private boolean gameOver = false; // 게임 오버 상태 변수 추가
 	private JButton restartButton; // 재시작 버튼 추가
 	private Thread gameThread; // 게임 루프를 실행할 스레드
@@ -84,6 +92,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 		// KeyBindings 설정
 		setKeyBindings();
 
+		loadHighScore(); // 최고 기록 불러오기
 		// 재시작 버튼 설정
 		restartButton = new JButton("Restart");
 		restartButton.addActionListener(new ActionListener() {
@@ -94,7 +103,6 @@ public class TetrisPanel extends JPanel implements Runnable {
 		});
 
 		setLayout(null); // null 레이아웃 사용
-		
 
 		settingButton = new JButton("Setting");
 		settingButton.setBackground(Color.WHITE);
@@ -119,82 +127,80 @@ public class TetrisPanel extends JPanel implements Runnable {
 		add(diffButton);
 
 		restartButton1.addActionListener(new ActionListener() {
-		    @Override
-		    public void actionPerformed(ActionEvent e) {
-		        restartGame();
-		    }
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				restartGame();
+			}
 		});
 
 		// settingButton 액션 리스너에서 attackModeButton과 diffButton 표시
 		settingButton.addActionListener(new ActionListener() {
-		    @Override
-		    public void actionPerformed(ActionEvent e) {
-		        ButtonOnOff = !ButtonOnOff;
-		        if (ButtonOnOff) { // 켜짐
-		            togglePause();
-		            settingButton.setText("Back");
-		            settingButton.setBackground(Color.GRAY);
-		            attackModeButton.setVisible(true); // Attack Mode 버튼 보이기
-		            diffButton.setVisible(true); // diffButton 보이기
-		        } else {
-		            isPaused = false;
-		            requestFocusInWindow();
-		            settingButton.setText("Setting");
-		            settingButton.setBackground(Color.WHITE);
-		            attackModeButton.setVisible(false); // Attack Mode 버튼 숨기기
-		            diffButton.setVisible(false); // diffButton 숨기기
-		        }
-		    }
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				ButtonOnOff = !ButtonOnOff;
+				if (ButtonOnOff) { // 켜짐
+					togglePause();
+					settingButton.setText("Back");
+					settingButton.setBackground(Color.GRAY);
+					attackModeButton.setVisible(true); // Attack Mode 버튼 보이기
+					diffButton.setVisible(true); // diffButton 보이기
+				} else {
+					isPaused = false;
+					requestFocusInWindow();
+					settingButton.setText("Setting");
+					settingButton.setBackground(Color.WHITE);
+					attackModeButton.setVisible(false); // Attack Mode 버튼 숨기기
+					diffButton.setVisible(false); // diffButton 숨기기
+				}
+			}
 		});
 
 		// diffButton 클릭 시 숫자와 색상 변경
 		diffButton.addActionListener(new ActionListener() {
-		    @Override
-		    public void actionPerformed(ActionEvent e) {
-		        String currentText = diffButton.getText();
-		        int nextNumber = Integer.parseInt(currentText) % 4 + 1; // 1, 2, 3, 10(?) 순환
-		        diffButton.setText(String.valueOf(nextNumber));
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				String currentText = diffButton.getText();
+				int nextNumber = Integer.parseInt(currentText) % 4 + 1; // 1, 2, 3, 10(?) 순환
+				diffButton.setText(String.valueOf(nextNumber));
 
-		        // 색상 변경: 1은 초록, 2는 노랑, 3은 빨강
-		        if (nextNumber == 1) {
-		            diffButton.setBackground(Color.GREEN);
-		            attackInterval = 12000;
-		            placeBlockTimeCount = 1200;
-		        } else if (nextNumber == 2) {
-		            diffButton.setBackground(Color.YELLOW);
-		            attackInterval = 9000;
-		            placeBlockTimeCount = 1150;
-		        } else if (nextNumber == 3) {
-		            diffButton.setBackground(Color.RED);
-		            attackInterval = 6000;
-		            placeBlockTimeCount = 1100;
-		        }
-		        else if (nextNumber == 4) {
-		            diffButton.setBackground(Color.BLACK);
-		            diffButton.setForeground(Color.WHITE);
-		            attackInterval = 1500;
-		            placeBlockTimeCount = 900;
-		        }
-		    }
+				// 색상 변경: 1은 초록, 2는 노랑, 3은 빨강
+				if (nextNumber == 1) {
+					diffButton.setBackground(Color.GREEN);
+					attackInterval = 12000;
+					placeBlockTimeCount = 1200;
+				} else if (nextNumber == 2) {
+					diffButton.setBackground(Color.YELLOW);
+					attackInterval = 9000;
+					placeBlockTimeCount = 1150;
+				} else if (nextNumber == 3) {
+					diffButton.setBackground(Color.RED);
+					attackInterval = 6000;
+					placeBlockTimeCount = 1100;
+				} else if (nextNumber == 4) {
+					diffButton.setBackground(Color.BLACK);
+					diffButton.setForeground(Color.WHITE);
+					attackInterval = 1500;
+					placeBlockTimeCount = 900;
+				}
+			}
 		});
 
-
-	    // attackModeButton 액션 리스너
-	    attackModeButton.addActionListener(new ActionListener() {
-	        @Override
-	        public void actionPerformed(ActionEvent e) {
-	            attackModeOnOff = !attackModeOnOff;
-	            if (attackModeOnOff) { // 켜짐
-	                System.out.println("켜짐");
-	                attackmode();
-	                attackModeButton.setBackground(Color.GRAY);
-	            } else {
-	                attackModeButton.setBackground(Color.WHITE);
-	                placeBlockTimeCount = 1200;
-	                System.out.println("꺼짐");
-	            }
-	        }
-	    });
+		// attackModeButton 액션 리스너
+		attackModeButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				attackModeOnOff = !attackModeOnOff;
+				if (attackModeOnOff) { // 켜짐
+					System.out.println("켜짐");
+					attackmode();
+					attackModeButton.setBackground(Color.GRAY);
+				} else {
+					attackModeButton.setBackground(Color.WHITE);
+					placeBlockTimeCount = 1200;
+					System.out.println("꺼짐");
+				}
+			}
+		});
 
 		restartButton.setVisible(false);// 재시작 버튼
 		add(restartButton);
@@ -208,6 +214,30 @@ public class TetrisPanel extends JPanel implements Runnable {
 		startGame();
 
 		this.requestFocusInWindow();
+	}
+
+	private void loadHighScore() {
+		File file = new File(HIGH_SCORE_FILE);
+		if (!file.exists()) {
+			saveHighScore(0); // 파일이 없으면 최고 기록 파일을 만들고 기본값 저장
+		}
+		try (BufferedReader reader = new BufferedReader(new FileReader(HIGH_SCORE_FILE))) {
+			String line = reader.readLine();
+			if (line != null) {
+				highScore = Integer.parseInt(line);
+			}
+		} catch (IOException | NumberFormatException e) {
+			e.printStackTrace();
+		}
+	}
+
+	// 최고 기록을 파일에 저장하는 메서드
+	private void saveHighScore(int score) {
+		try (BufferedWriter writer = new BufferedWriter(new FileWriter(HIGH_SCORE_FILE))) {
+			writer.write(String.valueOf(score));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	void togglePause() {
@@ -393,10 +423,17 @@ public class TetrisPanel extends JPanel implements Runnable {
 			g.setFont(new Font("Arial", Font.PLAIN, 20));
 			g.drawString("tetris: " + tetrisCount, getWidth() / 2 - 40, getHeight() / 2 + 70);
 
+			checkAndSaveHighScore(); // 최고 기록 갱신 여부 확인 및 저장
 			restartButton.setVisible(true); // 게임 오버 시 버튼 표시
 			restartButton.setBounds(getWidth() / 2 - 40, getHeight() / 2 - 20, 100, 40);
 		} else {
 			restartButton.setVisible(false); // 게임 중에는 버튼 숨김
+		}
+	}
+	private void checkAndSaveHighScore() {
+		if (Score > highScore) {
+			highScore = Score;
+			saveHighScore(highScore);
 		}
 	}
 
@@ -404,7 +441,6 @@ public class TetrisPanel extends JPanel implements Runnable {
 	 * -----------------------------------------------모드----------------------------
 	 * ---------
 	 */
-
 
 	public void startAttackMode() {
 		ActionListener actionListener = new ActionListener() {
@@ -441,15 +477,15 @@ public class TetrisPanel extends JPanel implements Runnable {
 			// 가장 아래 줄에 회색 줄 추가 (한 칸이 비어있는 회색 줄)
 			// 가장 아래 줄을 모두 회색으로 채우기
 			for (int c = 0; c < col; c++) {
-			    grid[row - 1][c] = 1;            // 회색 블록 설정
-			    colors[row - 1][c] = Color.GRAY;   // 회색 블록 색상
+				grid[row - 1][c] = 1; // 회색 블록 설정
+				colors[row - 1][c] = Color.GRAY; // 회색 블록 색상
 			}
 
 			// 회색으로 채운 후, 랜덤으로 하나의 칸을 빈 칸으로 설정
 			int emptyIndex = random.nextInt(col); // 랜덤으로 비울 칸 위치 결정
-			grid[row - 1][emptyIndex] = 0;        // 비워진 칸 설정
+			grid[row - 1][emptyIndex] = 0; // 비워진 칸 설정
 			colors[row - 1][emptyIndex] = Color.BLACK; // 비워진 칸 색상 (검정)
-		
+
 			repaint(); // 화면 다시 그리기
 		}
 	}
@@ -478,6 +514,11 @@ public class TetrisPanel extends JPanel implements Runnable {
 		g.setColor(Color.BLACK);
 		g.setFont(new Font("Arial", Font.BOLD, 30));
 		g.drawString("HOLD", 44, 97);
+		
+		
+		g.setColor(Color.RED);
+		g.setFont(new Font("Arial", Font.BOLD, 20));
+		g.drawString("BEST: " + highScore, 37, 250); // 최고 기록을 화면에 표시
 
 		// 홀드 블록 배경 그리기
 		g.setColor(Color.BLACK);
@@ -580,33 +621,32 @@ public class TetrisPanel extends JPanel implements Runnable {
 
 	@Override
 	public void run() {
-	    long lastAttackTime = System.currentTimeMillis(); // 마지막 공격 시간 초기화
-	    
-	    while (running) {
-	        if (!gameOver) {
-	            BlockDown();
-	            
-	            // 어택 모드가 켜져 있을 때만 15초마다 attackline 호출
-	            if (attackModeOnOff && !isPaused) {
-	                long currentTime = System.currentTimeMillis();
-	                if (currentTime - lastAttackTime >= attackInterval) {
-	                    attackline(); // 공격 라인 추가
-	                    lastAttackTime = currentTime; // 마지막 공격 시간 갱신
-	                }
-	            }
+		long lastAttackTime = System.currentTimeMillis(); // 마지막 공격 시간 초기화
 
-	            repaint();
-	        }
+		while (running) {
+			if (!gameOver) {
+				BlockDown();
 
-	        try {
-	            Thread.sleep(Timerturm);
-	        } catch (InterruptedException e) {
-	            e.printStackTrace();
-	            // 스레드 인터럽트 처리
-	        }
-	    }
+				// 어택 모드가 켜져 있을 때만 15초마다 attackline 호출
+				if (attackModeOnOff && !isPaused) {
+					long currentTime = System.currentTimeMillis();
+					if (currentTime - lastAttackTime >= attackInterval) {
+						attackline(); // 공격 라인 추가
+						lastAttackTime = currentTime; // 마지막 공격 시간 갱신
+					}
+				}
+
+				repaint();
+			}
+
+			try {
+				Thread.sleep(Timerturm);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+				// 스레드 인터럽트 처리
+			}
+		}
 	}
-
 
 	long placeBlockTime = 0; // 블록이 바닥에 닿은 시간을 저장
 
