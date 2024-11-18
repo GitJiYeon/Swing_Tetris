@@ -3,6 +3,7 @@ package SwingTetris;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
+import java.awt.Image;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.InputEvent;
@@ -18,6 +19,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
+import javax.imageio.ImageIO;
 import javax.swing.AbstractAction;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -64,13 +66,16 @@ public class TetrisPanel extends JPanel implements Runnable {
 	private List<Block> blockBag = new ArrayList<>(); // 블록 가방-
 	private JButton settingButton; // 설정 버튼 추가
 	boolean ButtonOnOff = false; // 설정 on/off
+	boolean BGMon = true; // BGM on/off
 	boolean attackModeOnOff = false; // 공격 모드 on/off
 	private JButton attackModeButton; // 공격 모드 버튼
 	private JButton restartButton1;
 	private JButton diffButton;
+	private JButton BGMbutton; // 재시작 버튼 추가
 	long lastAttackTime = 0; // 마지막 공격 발생 시간 저장
 	int attackInterval = 10000; // 15초 간격으로 공격
 
+	boolean gameoverSound;
 	private boolean gameOver = false; // 게임 오버 상태 변수 추가
 	private JButton restartButton; // 재시작 버튼 추가
 	private Thread gameThread; // 게임 루프를 실행할 스레드
@@ -80,6 +85,12 @@ public class TetrisPanel extends JPanel implements Runnable {
 
 	boolean isPaused = false; // 게임 일시 정지 여부 확인 변수
 	int placeBlockTimeCount = 1200;
+
+	private Image score100Image;
+	private Image score300Image;
+	private Image score500Image;
+	private Image score1000Image;
+	
 
 	public TetrisPanel() {
 		Timerturm = 600;
@@ -102,6 +113,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 			}
 		});
 
+
 		setLayout(null); // null 레이아웃 사용
 
 		settingButton = new JButton("Setting");
@@ -113,7 +125,14 @@ public class TetrisPanel extends JPanel implements Runnable {
 		restartButton1.setBackground(Color.WHITE);
 		restartButton1.setBounds(50, 40, 100, 25); // 설정 버튼 위치 및 크기 설정
 		add(restartButton1);
-
+		
+		BGMbutton = new JButton("BGM");
+		BGMbutton.setBackground(Color.WHITE);
+		BGMbutton.setForeground(Color.BLACK);
+		BGMbutton.setBounds(245, 15, 60, 25); // BGM 버튼 위치 및 크기 설정
+		BGMbutton.setVisible(false); // 처음에는 숨김 상태
+		add(BGMbutton);
+		
 		attackModeButton = new JButton("Attack Mode");
 		attackModeButton.setBackground(Color.WHITE);
 		attackModeButton.setBounds(100, 20, 90, 30); // attackMode 버튼 위치 및 크기 설정
@@ -140,17 +159,21 @@ public class TetrisPanel extends JPanel implements Runnable {
 				ButtonOnOff = !ButtonOnOff;
 				if (ButtonOnOff) { // 켜짐
 					togglePause();
+					SoundPlayer.stopBGM();
 					settingButton.setText("Back");
 					settingButton.setBackground(Color.GRAY);
 					attackModeButton.setVisible(true); // Attack Mode 버튼 보이기
 					diffButton.setVisible(true); // diffButton 보이기
+					BGMbutton.setVisible(true); // BGMbutton 보이기
 				} else {
 					isPaused = false;
+					if(BGMon) { SoundPlayer.playBGM("./src/sounds/tetrisBGM.wav");}
 					requestFocusInWindow();
 					settingButton.setText("Setting");
 					settingButton.setBackground(Color.WHITE);
 					attackModeButton.setVisible(false); // Attack Mode 버튼 숨기기
 					diffButton.setVisible(false); // diffButton 숨기기
+					BGMbutton.setVisible(false); // BGMbutton 보이기
 				}
 			}
 		});
@@ -166,14 +189,17 @@ public class TetrisPanel extends JPanel implements Runnable {
 				// 색상 변경: 1은 초록, 2는 노랑, 3은 빨강
 				if (nextNumber == 1) {
 					diffButton.setBackground(Color.GREEN);
+					diffButton.setForeground(Color.BLACK);
 					attackInterval = 12000;
 					placeBlockTimeCount = 1200;
 				} else if (nextNumber == 2) {
 					diffButton.setBackground(Color.YELLOW);
+					diffButton.setForeground(Color.BLACK);
 					attackInterval = 9000;
 					placeBlockTimeCount = 1150;
 				} else if (nextNumber == 3) {
 					diffButton.setBackground(Color.RED);
+					diffButton.setForeground(Color.BLACK);
 					attackInterval = 6000;
 					placeBlockTimeCount = 1100;
 				} else if (nextNumber == 4) {
@@ -191,17 +217,30 @@ public class TetrisPanel extends JPanel implements Runnable {
 			public void actionPerformed(ActionEvent e) {
 				attackModeOnOff = !attackModeOnOff;
 				if (attackModeOnOff) { // 켜짐
-					System.out.println("켜짐");
 					attackmode();
 					attackModeButton.setBackground(Color.GRAY);
 				} else {
 					attackModeButton.setBackground(Color.WHITE);
 					placeBlockTimeCount = 1200;
-					System.out.println("꺼짐");
 				}
 			}
 		});
 
+		// BGMbutton 액션 리스너
+		BGMbutton.addActionListener(new ActionListener() {
+					@Override
+					public void actionPerformed(ActionEvent e) {
+						BGMon = !BGMon;
+						if (BGMon) { // 켜짐
+							BGMbutton.setBackground(Color.WHITE);
+							BGMbutton.setForeground(Color.BLACK);
+						} else {
+							BGMbutton.setBackground(Color.BLACK);
+							BGMbutton.setForeground(Color.WHITE);
+						}
+					}
+				});
+				
 		restartButton.setVisible(false);// 재시작 버튼
 		add(restartButton);
 		settingButton.setVisible(true);// 설정 버튼
@@ -212,9 +251,10 @@ public class TetrisPanel extends JPanel implements Runnable {
 		// 게임 시작
 		gameThread = new Thread(this);
 		startGame();
-
+		
 		this.requestFocusInWindow();
 	}
+	
 
 	private void loadHighScore() {
 		File file = new File(HIGH_SCORE_FILE);
@@ -328,6 +368,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				if (!gameOver) {
+					SoundPlayer.playSound("./src/sounds/block_place.wav");//효과음
 					hardDrop();
 					repaint();
 				}
@@ -358,6 +399,8 @@ public class TetrisPanel extends JPanel implements Runnable {
 		fillScore(g);
 		tetrisClear(g);
 		stop(g);
+		// 배경 이미지 그리기
+		
 		if (!gameOver) {
 			int ghostRow = findGhostRow();
 			int[][] shape = nowBlock.getShape();
@@ -392,7 +435,45 @@ public class TetrisPanel extends JPanel implements Runnable {
 			attackModeButton.setBounds(getWidth() / 2 - 80, 50, 110, 30);
 		}
 
+		if (highScore >= 100) {
+			try {
+				score100Image = ImageIO.read(new File("./src/images/score100.png"));
+			} catch (IOException e) {
+				e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+			}
+		}
+		if (score100Image != null) { g.drawImage(score100Image, 30, 260, 120, 120, this); }
+		
+		if (highScore >= 300) {
+			try {
+				score300Image = ImageIO.read(new File("./src/images/score300.png"));
+			} catch (IOException e) {
+				e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+			}
+		}
+		if (score300Image != null) { g.drawImage(score300Image, 30, 380, 120, 120, this); }
+		
+		if (highScore >= 500) {
+			try {
+				score500Image = ImageIO.read(new File("./src/images/score500.png"));
+			} catch (IOException e) {
+				e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+			}
+		}
+		if (score500Image != null) { g.drawImage(score500Image, 30, 500, 120, 120, this); }
+		
+		if (highScore >= 1000) {
+			try {
+				score1000Image = ImageIO.read(new File("./src/images/score1000.png"));
+			} catch (IOException e) {
+				e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+			}
+		}
+		if (score1000Image != null) { g.drawImage(score1000Image, 30, 620, 120, 120, this); }
+		
 		if (!gameOver) { // 게임 오버가 아닌 경우에만 블록을 그림
+			
+			
 			int[][] shape = nowBlock.getShape();
 			int startX = (getWidth() - col * gridSize) / 2; // 그리드 가로 중앙
 			int startY = (getHeight() - row * gridSize) / 2; // 그리드 세로 중앙
@@ -413,6 +494,11 @@ public class TetrisPanel extends JPanel implements Runnable {
 		}
 
 		if (gameOver) { // 게임 오버 시 메시지 출력
+			SoundPlayer.stopBGM();
+			if(gameoverSound) {
+				SoundPlayer.playSound("./src/sounds/tetrisGameOver.wav"); // 효과음 재생
+				gameoverSound = false;
+			}
 			g.setColor(Color.WHITE);
 			g.setFont(new Font("Arial", Font.BOLD, 30));
 			g.drawString("Game Over!", getWidth() / 2 - 75, getHeight() / 2 - 30);
@@ -430,6 +516,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 			restartButton.setVisible(false); // 게임 중에는 버튼 숨김
 		}
 	}
+
 	private void checkAndSaveHighScore() {
 		if (Score > highScore) {
 			highScore = Score;
@@ -452,11 +539,11 @@ public class TetrisPanel extends JPanel implements Runnable {
 			}
 		};
 
-		// 15초마다 actionListener를 호출
+		// actionListener를 호출
 		new javax.swing.Timer(attackInterval, actionListener).start();
 	}
 
-	// 공격 모드에서 15초마다 공격 발생
+	// 공격 모드에서 n초마다 공격 발생
 	void attackmode() {
 		long currentTime = System.currentTimeMillis();
 		if (currentTime - lastAttackTime >= attackInterval) {
@@ -514,8 +601,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 		g.setColor(Color.BLACK);
 		g.setFont(new Font("Arial", Font.BOLD, 30));
 		g.drawString("HOLD", 44, 97);
-		
-		
+
 		g.setColor(Color.RED);
 		g.setFont(new Font("Arial", Font.BOLD, 20));
 		g.drawString("BEST: " + highScore, 37, 250); // 최고 기록을 화면에 표시
@@ -654,6 +740,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 		if (isPaused) {
 			lastAttackTime = System.currentTimeMillis();
 			return; // 게임이 일시 정지 상태이면 아무 것도 하지 않음
+			
 		}
 		if (canMove(nowBlockRow + 1, nowBlockCol)) {
 			nowBlockRow++;
@@ -663,7 +750,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 			if (placeBlockTime == 0) {
 				placeBlockTime = System.currentTimeMillis(); // 현재 시간 기록
 			}
-			// 블록이 바닥에 닿은 후 1.5초가 지났는지 확인
+			// 블록이 바닥에 닿은 후 n초가 지났는지 확인
 			if (System.currentTimeMillis() - placeBlockTime >= placeBlockTimeCount) {
 				placeBlock(); // 블록 고정
 				clearFullRows();
@@ -673,8 +760,9 @@ public class TetrisPanel extends JPanel implements Runnable {
 				holdUsed = false; // 새로운 블록이 나올 때마다 홀드 초기화
 				placeBlockTime = 0; // 시간을 초기화
 
+				// 새로운 블록을 초기 위치에 배치할 수 없는 경우 게임 오버 처리
 				if (!canMove(nowBlockRow, nowBlockCol)) {
-					gameOver = true; // 게임 오버 상태 설정
+					gameOver = true;
 					System.out.println("Game Over!");
 				}
 			}
@@ -689,8 +777,13 @@ public class TetrisPanel extends JPanel implements Runnable {
 					int gridRow = newRow + r;
 					int gridCol = newCol + c;
 
-					if (gridRow >= row || gridCol < 0 || gridCol >= col
-							|| (gridRow >= 0 && grid[gridRow][gridCol] == 1)) {
+					// 배열의 범위를 벗어나면 false 반환
+					if (gridRow >= row || gridRow < 0 || gridCol < 0 || gridCol >= col) {
+						return false;
+					}
+
+					// 블록이 그리드에 겹치는 경우 false 반환
+					if (gridRow >= 0 && grid[gridRow][gridCol] == 1) {
 						return false;
 					}
 				}
@@ -703,6 +796,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 		int[][] shape = nowBlock.getShape();
 		fullLineCount = 0;
 		Score++;
+		SoundPlayer.playSound("./src/sounds/block_place.wav"); // 효과음 재생
 		for (int r = 0; r < shape.length; r++) {
 			for (int c = 0; c < shape[r].length; c++) {
 				if (shape[r][c] == 1) {
@@ -886,15 +980,20 @@ public class TetrisPanel extends JPanel implements Runnable {
 	int fullLineCount = 0; // 깎인 라인 수 카운트
 	long tetrisDisplayTime = 0; // 테트리스가 화면에 표시되는 시간
 
+	boolean tetrisclearsound = true;
 	void tetrisClear(Graphics g) {
 		if (fullTetris) {
+			if(tetrisclearsound) { SoundPlayer.playSound("./src/sounds/lineclear4.wav"); }//효과음
+			tetrisclearsound = false;
+			
 			if (System.currentTimeMillis() - tetrisDisplayTime < 1500) { // 1.5초
 				g.setColor(Color.WHITE);
 				g.setFont(new Font("Arial", Font.BOLD, 30));
 				g.drawString("Tetris!", getWidth() / 2 - 40, getHeight() / 2 - 50);
 
 			} else {
-				// 2초가 지나면 fullTetris를 false로 설정
+				// 2초가 지나면 fullTetris를 false로 설 정
+				tetrisclearsound = true;
 				fullTetris = false;
 				fullLineCount = 0;
 				Score += 10;
@@ -916,6 +1015,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 			if (fullRow) {
 				Score += 3;
 				fullLineCount++;
+				SoundPlayer.playSound("./src/sounds/lineclear1.wav");
 				for (int i = r; i > 0; i--) {
 					System.arraycopy(grid[i - 1], 0, grid[i], 0, col);
 					System.arraycopy(colors[i - 1], 0, colors[i], 0, col); // 색상 배열도 같이 이동
@@ -953,10 +1053,6 @@ public class TetrisPanel extends JPanel implements Runnable {
 		}
 	}
 
-	private void setting() {
-
-	}
-
 	// 게임 재시작 메서드
 	private void restartGame() {
 		gameOver = false;
@@ -976,6 +1072,8 @@ public class TetrisPanel extends JPanel implements Runnable {
 		HoldBlockColor = null;
 		tetrisCount = 0;
 		Score = 0;
+		gameoverSound = true;
+		if(BGMon) { SoundPlayer.playBGM("./src/sounds/tetrisBGM.wav"); }
 		if (!running) {
 			running = true;
 			gameThread = new Thread(this);

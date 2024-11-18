@@ -16,7 +16,7 @@ public class TetrisMenu extends JFrame {
     private Image backgroundImage; // 배경 이미지 저장
 
     public TetrisMenu() {
-        setTitle("Tetris - made by Jiyeon");
+        setTitle("Tetress - made by Jiyeon");
         setSize(650, 850);
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
