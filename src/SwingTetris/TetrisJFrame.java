@@ -4,7 +4,7 @@ import javax.swing.*;
 
 public class TetrisJFrame extends JFrame {
     public TetrisJFrame() {
-        setTitle("Tetris - made by Jiyeon");
+        setTitle("Tetress - made by Jiyeon");
         setSize(650, 850);
         setResizable(false);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
