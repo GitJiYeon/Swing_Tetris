@@ -84,6 +84,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 	boolean gameoverSound; // 게임 오버 사운드가 한 번만 실행되도록 하는 변수
 	boolean eatingSound = true; // 블록 먹는 소리 한번만 재생
 	private boolean gameOver = false; // 게임 오버 상태
+
 	private JButton restartButton; // 재시작 버튼 추가
 	
 	private Thread gameThread; // 게임 루프를 실행할 스레드
@@ -145,7 +146,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 		bugButton.setBounds(310, 15, 120, 25); // 설정 버튼 위치 및 크기 설정
 		bugButton.setVisible(false); // 처음에는 숨김 상태
 		add(bugButton);
-		
+
 		attackModeButton = new JButton("Attack Mode");
 		attackModeButton.setBackground(Color.WHITE);
 		attackModeButton.setBounds(100, 20, 90, 30); // attackMode 버튼 위치 및 크기 설정
@@ -179,6 +180,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 					diffButton.setVisible(true); // diffButton 보이기
 					BGMbutton.setVisible(true); // BGMbutton 보이기
 					bugButton.setVisible(true); // bugButton 보이기
+
 				} else {
 					isPaused = false;
 					if(BGMon) { SoundPlayer.playBGM("./src/sounds/tetrisBGM.wav");}
@@ -187,8 +189,10 @@ public class TetrisPanel extends JPanel implements Runnable {
 					settingButton.setBackground(Color.WHITE);
 					attackModeButton.setVisible(false); // Attack Mode 버튼 숨기기
 					diffButton.setVisible(false); // diffButton 숨기기
+
 					BGMbutton.setVisible(false); // BGMbutton 숨기기
 					bugButton.setVisible(false); // bugButton 숨기기
+
 				}
 			}
 		});
@@ -251,11 +255,11 @@ public class TetrisPanel extends JPanel implements Runnable {
 							BGMbutton.setForeground(Color.BLACK);
 						} else {
 							BGMbutton.setBackground(Color.GRAY);
+
 							BGMbutton.setForeground(Color.WHITE);
 						}
 					}
 				});
-		
 		// bugButton 액션 리스너
 		bugButton.addActionListener(new ActionListener() {
 					@Override
@@ -270,7 +274,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 						}
 					}
 				});
-				
+
 				
 		restartButton.setVisible(false);// 재시작 버튼
 		add(restartButton);
@@ -839,6 +843,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 		Score++;
 		SoundPlayer.playSound("./src/sounds/block_place.wav"); // 효과음 재생
 		eatingSound = true;
+
 		for (int r = 0; r < shape.length; r++) {
 			for (int c = 0; c < shape[r].length; c++) {
 				if (shape[r][c] == 1) {
