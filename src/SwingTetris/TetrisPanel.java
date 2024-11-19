@@ -48,6 +48,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 
 	int Score = 0;
 	int tetrisCount = 0;
+	int yummyCount = 0;
 
 	// 블록 모양
 	int[][] blockI = { { 1, 1, 1, 1 } };
@@ -64,26 +65,32 @@ public class TetrisPanel extends JPanel implements Runnable {
 			new Block(blockS, Color.decode("#55d941")) };
 
 	private List<Block> blockBag = new ArrayList<>(); // 블록 가방-
+	
+	private JButton restartButton1; // 재시작 버튼
+	private JButton diffButton; // 난이도 설정 버튼
+	private JButton BGMbutton; // BGM 버튼 
+	private JButton attackModeButton; // 공격 모드 버튼
+	private JButton bugButton; // 버그 모드 버튼 
+	
 	private JButton settingButton; // 설정 버튼 추가
 	boolean ButtonOnOff = false; // 설정 on/off
 	boolean BGMon = true; // BGM on/off
 	boolean attackModeOnOff = false; // 공격 모드 on/off
-	private JButton attackModeButton; // 공격 모드 버튼
-	private JButton restartButton1;
-	private JButton diffButton;
-	private JButton BGMbutton; // 재시작 버튼 추가
+	boolean bugModOnOff = false; // 버그 모드 on/off
+	
 	long lastAttackTime = 0; // 마지막 공격 발생 시간 저장
 	int attackInterval = 10000; // 15초 간격으로 공격
 
-	boolean gameoverSound;
-	private boolean gameOver = false; // 게임 오버 상태 변수 추가
+	boolean gameoverSound; // 게임 오버 사운드가 한 번만 실행되도록 하는 변수
+	boolean eatingSound = true; // 블록 먹는 소리 한번만 재생
+	private boolean gameOver = false; // 게임 오버 상태
 	private JButton restartButton; // 재시작 버튼 추가
+	
 	private Thread gameThread; // 게임 루프를 실행할 스레드
 	private boolean running = false; // 게임 루프 실행 상태
-
 	private boolean holdUsed = false; // 한 턴에 한 번만 홀드 사용 가능하도록 플래그 변수 추가
-
 	boolean isPaused = false; // 게임 일시 정지 여부 확인 변수
+	
 	int placeBlockTimeCount = 1200;
 
 	private Image score100Image;
@@ -133,6 +140,12 @@ public class TetrisPanel extends JPanel implements Runnable {
 		BGMbutton.setVisible(false); // 처음에는 숨김 상태
 		add(BGMbutton);
 		
+		bugButton = new JButton("Hungry BUG🍗");
+		bugButton.setBackground(Color.WHITE);
+		bugButton.setBounds(310, 15, 120, 25); // 설정 버튼 위치 및 크기 설정
+		bugButton.setVisible(false); // 처음에는 숨김 상태
+		add(bugButton);
+		
 		attackModeButton = new JButton("Attack Mode");
 		attackModeButton.setBackground(Color.WHITE);
 		attackModeButton.setBounds(100, 20, 90, 30); // attackMode 버튼 위치 및 크기 설정
@@ -165,6 +178,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 					attackModeButton.setVisible(true); // Attack Mode 버튼 보이기
 					diffButton.setVisible(true); // diffButton 보이기
 					BGMbutton.setVisible(true); // BGMbutton 보이기
+					bugButton.setVisible(true); // bugButton 보이기
 				} else {
 					isPaused = false;
 					if(BGMon) { SoundPlayer.playBGM("./src/sounds/tetrisBGM.wav");}
@@ -173,7 +187,8 @@ public class TetrisPanel extends JPanel implements Runnable {
 					settingButton.setBackground(Color.WHITE);
 					attackModeButton.setVisible(false); // Attack Mode 버튼 숨기기
 					diffButton.setVisible(false); // diffButton 숨기기
-					BGMbutton.setVisible(false); // BGMbutton 보이기
+					BGMbutton.setVisible(false); // BGMbutton 숨기기
+					bugButton.setVisible(false); // bugButton 숨기기
 				}
 			}
 		});
@@ -235,11 +250,27 @@ public class TetrisPanel extends JPanel implements Runnable {
 							BGMbutton.setBackground(Color.WHITE);
 							BGMbutton.setForeground(Color.BLACK);
 						} else {
-							BGMbutton.setBackground(Color.BLACK);
+							BGMbutton.setBackground(Color.GRAY);
 							BGMbutton.setForeground(Color.WHITE);
 						}
 					}
 				});
+		
+		// bugButton 액션 리스너
+		bugButton.addActionListener(new ActionListener() {
+					@Override
+					public void actionPerformed(ActionEvent e) {
+						bugModOnOff = !bugModOnOff;
+						if (bugModOnOff) { // 켜짐
+							bugButton.setBackground(Color.GRAY);
+							bugButton.setForeground(Color.WHITE);
+						} else {
+							bugButton.setBackground(Color.WHITE);
+							bugButton.setForeground(Color.BLACK);
+						}
+					}
+				});
+				
 				
 		restartButton.setVisible(false);// 재시작 버튼
 		add(restartButton);
@@ -247,6 +278,8 @@ public class TetrisPanel extends JPanel implements Runnable {
 		add(settingButton);
 		attackModeButton.setVisible(false);
 		add(attackModeButton);
+		bugButton.setVisible(false);
+		add(bugButton);
 
 		// 게임 시작
 		gameThread = new Thread(this);
@@ -339,23 +372,27 @@ public class TetrisPanel extends JPanel implements Runnable {
 			}
 		});
 
-		// 위쪽 화살표 키 (회전)
+		
+		// 위쪽 화살표(회전)
 		this.getInputMap().put(KeyStroke.getKeyStroke("UP"), "rotate");
 		this.getActionMap().put("rotate", new AbstractAction() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				if (!gameOver) {
-					rotateBlock();
+					if(bugModOnOff) { bugRotateBlock(); }
+					else { rotateBlock(); }
 					repaint();
 				}
 			}
 		});
+		
 		// z 키 (회전)
 		this.getInputMap().put(KeyStroke.getKeyStroke("Z"), "counterclockwiserotate");
 		this.getActionMap().put("counterclockwiserotate", new AbstractAction() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				if (!gameOver) {
+					if(bugModOnOff) { SoundPlayer.playSound("./src/sounds/dontEat.wav");}//효과음 
 					counterclockwiserotateBlock();
 					repaint();
 				}
@@ -505,10 +542,14 @@ public class TetrisPanel extends JPanel implements Runnable {
 
 			g.setFont(new Font("Arial", Font.PLAIN, 20));
 			g.drawString("score: " + Score, getWidth() / 2 - 40, getHeight() / 2 + 50);
-
+			if(bugModOnOff) {
+				g.setFont(new Font("Arial", Font.PLAIN, 20));
+				g.drawString("your... " + yummyCount+"kg!", getWidth() / 2 - 40, getHeight() / 2 + 70);
+			}
+			else {
 			g.setFont(new Font("Arial", Font.PLAIN, 20));
 			g.drawString("tetris: " + tetrisCount, getWidth() / 2 - 40, getHeight() / 2 + 70);
-
+			}
 			checkAndSaveHighScore(); // 최고 기록 갱신 여부 확인 및 저장
 			restartButton.setVisible(true); // 게임 오버 시 버튼 표시
 			restartButton.setBounds(getWidth() / 2 - 40, getHeight() / 2 - 20, 100, 40);
@@ -797,6 +838,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 		fullLineCount = 0;
 		Score++;
 		SoundPlayer.playSound("./src/sounds/block_place.wav"); // 효과음 재생
+		eatingSound = true;
 		for (int r = 0; r < shape.length; r++) {
 			for (int c = 0; c < shape[r].length; c++) {
 				if (shape[r][c] == 1) {
@@ -806,6 +848,64 @@ public class TetrisPanel extends JPanel implements Runnable {
 		}
 	}
 
+	void bugRotateBlock() {
+	    int[][] currentShape = nowBlock.getShape(); // 현재 블록 모양 가져오기
+	    int rows = currentShape.length; // 행 개수
+	    int cols = currentShape[0].length; // 열 개수
+
+	    // L, J 모양 블록인 경우 2x2 블록으로 강제 변환
+	    if ((currentShape == blockL || currentShape == blockJ)) {
+	        // L 또는 J 블록이 회전 시 2x2로 강제 변환
+	        int[][] rotatedShape = new int[2][2]; // 2x2 크기로 설정 (회전 후 2칸짜리 블록)
+
+	        // 회전 로직 (시계 방향 회전)
+	        for (int r = 0; r < rows; r++) {
+	            for (int c = 0; c < cols; c++) {
+	                if (c < 2 && r < 2) { // 경계를 잘못 설정하여 오른쪽 데이터가 잘림
+	                    rotatedShape[c][2 - 1 - r] = currentShape[r][c]; // 회전 시 2x2로 변환
+	                }
+	            }
+	        }
+	        nowBlock.setShape(rotatedShape);
+	    }
+	 // O 모양 블록 회전 처리
+	    else if (currentShape == blockO) {
+	    	SoundPlayer.playSound("./src/sounds/eating.wav"); // 효과음 재생
+	        //1x2
+	        int[][] rotatedShape = new int[1][2]; // O 블록을 1x2 형태로 설정
+
+	        // O 블록을 2x2에서 1x2로 변환
+	        for (int r = 0; r < 2; r++) {  // O 블록이 2x2 형태에서 1x2로 바뀐다
+	            for (int c = 0; c < 2; c++) {
+	                rotatedShape[0][c] = currentShape[r][c]; // 2x2 배열을 1x2 배열로 변환
+	            }
+	        }
+	        // 회전된 O 블록을 설정
+	        nowBlock.setShape(rotatedShape);
+	    } else {
+	        // L, J 블록이 아닌 경우에는 일반적인 회전 로직 사용
+	        int[][] rotatedShape = new int[rows][rows]; // 회전 후 배열 크기 설정
+
+	        // 회전 로직 (시계 방향 회전)
+	        for (int r = 0; r < rows; r++) {
+	            for (int c = 0; c < cols; c++) {
+	                if (c < rows) { // 경계를 잘못 설정하여 오른쪽 데이터가 잘림
+	                    rotatedShape[c][rows - 1 - r] = currentShape[r][c];
+	                }
+	            }
+	        }
+
+	        // 블록에 새로 회전된 배열을 설정
+	        nowBlock.setShape(rotatedShape);
+	        if(eatingSound) {
+	        	SoundPlayer.playSound("./src/sounds/eating.wav"); // 효과음 재생
+	        	yummyCount++;
+	        	eatingSound = false;
+	        }
+	    }
+	} 
+
+	
 	void rotateBlock() {
 		int[][] currentShape = nowBlock.getShape();
 		int[][] rotatedShape = new int[currentShape[0].length][currentShape.length];
