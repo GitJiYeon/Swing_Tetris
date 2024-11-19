@@ -27,7 +27,7 @@ public class TetrisMenu extends JFrame {
             backgroundImage = ImageIO.read(new File("./src/images/tetrisMenu.png"));
         } catch (IOException e) {
             e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
-        }
+        } 
 
         menuPanel = new JPanel() {
             @Override
