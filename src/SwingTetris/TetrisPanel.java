@@ -23,8 +23,10 @@ import javax.imageio.ImageIO;
 import javax.swing.AbstractAction;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 
 public class TetrisPanel extends JPanel implements Runnable {
 	int row = 20;// ㅅㄹ
@@ -43,7 +45,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 	Block nowBlock;
 	Random random = new Random(); // 랜덤 블록 생성을 위한 랜덤 객체
 
-	private static final String HIGH_SCORE_FILE = "highscore.txt"; // 최고 기록 저장 파일 이름
+	private static final String HIGH_SCORE_FILE = "highscoreFile.txt"; // 최고 기록 저장 파일 이름
 	private int highScore = 0; // 최고 기록 변수
 
 	int Score = 0;
@@ -67,19 +69,18 @@ public class TetrisPanel extends JPanel implements Runnable {
 	private List<Block> blockBag = new ArrayList<>(); // 블록 가방-
 	
 	private JButton restartButton1; // 재시작 버튼
-	private JButton diffButton; // 난이도 설정 버튼
+	
 	private JButton BGMbutton; // BGM 버튼 
-	private JButton attackModeButton; // 공격 모드 버튼
-	private JButton bugButton; // 버그 모드 버튼 
+	private JButton menuButton; // 메뉴 버튼
 	
 	private JButton settingButton; // 설정 버튼 추가
 	boolean ButtonOnOff = false; // 설정 on/off
 	boolean BGMon = true; // BGM on/off
-	boolean attackModeOnOff = false; // 공격 모드 on/off
-	boolean bugModOnOff = false; // 버그 모드 on/off
+	static boolean attackModeOnOff = false; // 공격 모드 on/off
+	static boolean bugModOnOff = false; // 버그 모드 on/off
 	
 	long lastAttackTime = 0; // 마지막 공격 발생 시간 저장
-	int attackInterval = 10000; // 15초 간격으로 공격
+	static int attackInterval = 10000; // 15초 간격으로 공격
 
 	boolean gameoverSound; // 게임 오버 사운드가 한 번만 실행되도록 하는 변수
 	boolean eatingSound = true; // 블록 먹는 소리 한번만 재생
@@ -92,7 +93,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 	private boolean holdUsed = false; // 한 턴에 한 번만 홀드 사용 가능하도록 플래그 변수 추가
 	boolean isPaused = false; // 게임 일시 정지 여부 확인 변수
 	
-	int placeBlockTimeCount = 1200; //블록이 바닥에 닿고 고정되기까지 걸리는 시간
+	static int placeBlockTimeCount = 1200; //블록이 바닥에 닿고 고정되기까지 걸리는 시간
 
 	//스코어 엠블럼 이미지
 	private Image score100Image;
@@ -112,7 +113,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 		// KeyBindings 설정
 		setKeyBindings();
 
-		loadHighScore(); // 최고 기록 불러오기
+		loadHighScores(); // 최고 기록 불러오기
 		
 		
 		//==============================================================================================================     버튼 설정
@@ -126,6 +127,8 @@ public class TetrisPanel extends JPanel implements Runnable {
 		
 		setLayout(null); // null 레이아웃 사용
 
+		add(restartButton);
+		
 		settingButton = new JButton("Setting"); // 왼쪽 상단 설정 버튼
 		settingButton.setBackground(Color.WHITE);
 		settingButton.setBounds(50, 10, 100, 25);
@@ -139,28 +142,17 @@ public class TetrisPanel extends JPanel implements Runnable {
 		BGMbutton = new JButton("BGM"); // 설정 BGM 전원 버튼
 		BGMbutton.setBackground(Color.WHITE);
 		BGMbutton.setForeground(Color.BLACK);
-		BGMbutton.setBounds(245, 15, 60, 25); 
+		BGMbutton.setBounds(245, 15, 100, 25); 
 		BGMbutton.setVisible(false); // 처음에는 숨김 상태
 		add(BGMbutton);
 		
-		bugButton = new JButton("Hungry BUG🍗"); // 배고픈 벌레(?) 모드
-		bugButton.setBackground(Color.WHITE);
-		bugButton.setBounds(310, 15, 120, 25); 
-		bugButton.setVisible(false); // 처음에는 숨김 상태
-		add(bugButton);
-
-		attackModeButton = new JButton("Attack Mode"); // 공격 모드
-		attackModeButton.setBackground(Color.WHITE);
-		attackModeButton.setBounds(100, 20, 90, 30); 
-		attackModeButton.setVisible(false); // 처음에는 숨김 상태
-		add(attackModeButton);
-
-		diffButton = new JButton("1"); // 공격모드 난이도 버튼
-		diffButton.setBackground(Color.GREEN); // 초기 색상 초록
-		diffButton.setBounds(360, 50, 50, 30); // attackMode 버튼 옆에 위치
-		diffButton.setVisible(false); // 처음에는 숨김 상태
+		menuButton = new JButton("Menu"); // 설정 BGM 전원 버튼
+		menuButton.setBackground(Color.WHITE);
+		menuButton.setForeground(Color.BLACK);
+		menuButton.setBounds(245, 50, 100, 25); 
+		menuButton.setVisible(false); // 처음에는 숨김 상태
+		add(menuButton);
 		
-		add(diffButton);
 		//==========================================================================================================      버튼 리스너
 		restartButton1.addActionListener(new ActionListener() { // 왼쪽 상단 재시작버튼 
 			@Override
@@ -172,17 +164,15 @@ public class TetrisPanel extends JPanel implements Runnable {
 		settingButton.addActionListener(new ActionListener() { // 설정 버튼
 			@Override
 			public void actionPerformed(ActionEvent e) { 
+				
 				ButtonOnOff = !ButtonOnOff;
 				if (ButtonOnOff) { // 켜짐
 					isPaused = true; // 일시정지
 					SoundPlayer.stopBGM(); // 브금 종료
 					settingButton.setText("Back"); // 글씨를 Back으로 변경
 					settingButton.setBackground(Color.GRAY); // 버튼 색상 회색으로 변경
-					attackModeButton.setVisible(true); // Attack Mode 버튼 보이기
-					diffButton.setVisible(true); // diffButton 보이기
 					BGMbutton.setVisible(true); // BGMbutton 보이기
-					bugButton.setVisible(true); // bugButton 보이기
-					attackModeButton.setBounds(getWidth() / 2 - 80, 50, 110, 30);
+					menuButton.setVisible(true);
 
 				} else { //꺼짐
 					isPaused = false; //일시정지 끄기
@@ -190,59 +180,13 @@ public class TetrisPanel extends JPanel implements Runnable {
 					requestFocusInWindow(); //포커스를 화면으로
 					settingButton.setText("Setting"); //글씨를 Setting으로 	변경
 					settingButton.setBackground(Color.WHITE); // 버튼 색상 흰색으로 변견
-					attackModeButton.setVisible(false); // Attack Mode 버튼 숨기기
-					diffButton.setVisible(false); // diffButton 숨기기
 					BGMbutton.setVisible(false); // BGMbutton 숨기기
-					bugButton.setVisible(false); // bugButton 숨기기
+					menuButton.setVisible(false);
 
 				}
 			}
 		});
-		//============= 설정 누르면 나오는 버튼들 =============
-		diffButton.addActionListener(new ActionListener() {// 난이도 설정 버튼
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				String currentText = diffButton.getText(); // 현재 텍스트를 변수에 저장
-				int nextNumber = Integer.parseInt(currentText) % 4 + 1; // 1, 2, 3, 4 순환
-				diffButton.setText(String.valueOf(nextNumber)); // 클릭마다 바꾸기
-
-				if (nextNumber == 1) { // 난이도 1
-					diffButton.setBackground(Color.GREEN); //색상 초록
-					diffButton.setForeground(Color.BLACK); //글씨 검정
-					attackInterval = 12000; // 방해줄 12초마다
-					placeBlockTimeCount = 1200; // 블럭이 바닥에 닿는 시간
-				} else if (nextNumber == 2) { // 난이도 2
-					diffButton.setBackground(Color.YELLOW); //색상 노랑
-					diffButton.setForeground(Color.BLACK); //글씨 검정
-					attackInterval = 9000; // 방해즐 9초마다
-					placeBlockTimeCount = 1150; // 블럭이 바닥에 닿는 시간
-				} else if (nextNumber == 3) { // 난이도 3
-					diffButton.setBackground(Color.RED); //색상 빨강
-					diffButton.setForeground(Color.BLACK); // 글씨 검정
-					attackInterval = 5000; // 방해줄 5초마다
-					placeBlockTimeCount = 1100; // 블럭이 바닥에 닿는 시간
-				} else if (nextNumber == 4) { 
-					diffButton.setBackground(Color.BLACK); //색상 블랙
-					diffButton.setForeground(Color.WHITE); //글씨 흰색
-					attackInterval = 1500; // 방해줄 1.5초마다
-					placeBlockTimeCount = 900; // 블럭이 바닥에 닿는 시간
-				}
-			}
-		});
-		attackModeButton.addActionListener(new ActionListener() { // 공격 모드
-			@Override
-			public void actionPerformed(ActionEvent e) {
-				attackModeOnOff = !attackModeOnOff;
-				if (attackModeOnOff) { // 켜짐
-					attackmode(); // 모드 실행
-					attackModeButton.setBackground(Color.GRAY); // 버튼 색상 회색
-				} else { // 꺼짐
-					attackModeButton.setBackground(Color.WHITE); // 버튼 색상 흰색
-					placeBlockTimeCount = 1200; // 블럭 놓이는 시간 초기화
-				}
-			}
-		});
-
+		//============= 설정 누르면 나오는 버튼들 ==============
 		BGMbutton.addActionListener(new ActionListener() { // BGMonOff
 					@Override
 					public void actionPerformed(ActionEvent e) {
@@ -257,20 +201,26 @@ public class TetrisPanel extends JPanel implements Runnable {
 					}
 				});
 		
-		bugButton.addActionListener(new ActionListener() { // 버그 모드
-					@Override
-					public void actionPerformed(ActionEvent e) { 
-						bugModOnOff = !bugModOnOff;
-						if (bugModOnOff) { // 켜짐
-							bugButton.setBackground(Color.GRAY);
-							bugButton.setForeground(Color.WHITE);
-						} else { // 꺼짐
-							bugButton.setBackground(Color.WHITE);
-							bugButton.setForeground(Color.BLACK);
-						}
-					}
-				});
+		menuButton.addActionListener(new ActionListener() { // 메뉴로 돌아가는 버튼
+		    @Override
+		    public void actionPerformed(ActionEvent e) {
+		        // BGM 멈추기
+		        SoundPlayer.stopBGM();
 
+		        // 게임 상태 종료
+		        running = false;
+
+		        // 새로운 메뉴 객체 생성
+		        TetrisMenu menu = new TetrisMenu(); 
+		        menu.setVisible(true); // 새로운 메뉴 화면 표시
+
+		        // 현재 JFrame을 종료하기 위해 부모 JFrame을 가져와서 dispose() 호출
+		        JFrame parentFrame = (JFrame) SwingUtilities.getWindowAncestor(menuButton); // 부모 JFrame 참조
+		        parentFrame.dispose(); // 현재 창 종료
+		    }
+		});
+
+		
 		gameThread = new Thread(this);
 		startGame();// 게임 시작 
 		
@@ -278,35 +228,78 @@ public class TetrisPanel extends JPanel implements Runnable {
 	}
 	//===============================================================================================================   파일처리
 
-	private void loadHighScore() { //최고기록 불러오는 메서드
-		File file = new File(HIGH_SCORE_FILE);
-		if (!file.exists()) {
-			saveHighScore(0); // 파일이 없으면 최고 기록 파일을 만들고 기본값 저장
-		}
-		try (BufferedReader reader = new BufferedReader(new FileReader(HIGH_SCORE_FILE))) {
-			String line = reader.readLine();
-			if (line != null) {
-				highScore = Integer.parseInt(line);
-			}
-		} catch (IOException | NumberFormatException e) {
-			e.printStackTrace();
-		}
+
+	private int normalModeHighScore;
+	private int attackModeHighScore;
+	private int bugModeHighScore;
+
+	// 모드별 최고 기록 불러오기
+	private void loadHighScores() {
+		System.out.println("기록 호출");
+	    File file = new File(HIGH_SCORE_FILE);
+	    if (!file.exists()) {
+	        saveHighScores(); // 파일이 없으면 새로 생성
+	        System.out.println("파일 없음");
+	    }
+	    
+	    
+	    try (BufferedReader reader = new BufferedReader(new FileReader(HIGH_SCORE_FILE))) {
+	        String line;
+	        if ((line = reader.readLine()) != null) {
+	            normalModeHighScore = Integer.parseInt(line);
+	        }
+	        if ((line = reader.readLine()) != null) {
+	            attackModeHighScore = Integer.parseInt(line);
+	        }
+	        if ((line = reader.readLine()) != null) {
+	            bugModeHighScore = Integer.parseInt(line);
+	        }
+	    } catch (IOException | NumberFormatException e) {
+	        e.printStackTrace();
+	    }
+	 // 모드에 따라 고유한 최고 기록을 선택
+	    if (attackModeOnOff) {
+	        highScore = attackModeHighScore;
+	    } else if (bugModOnOff) {
+	        highScore = bugModeHighScore;
+	    } else if(!attackModeOnOff && !bugModOnOff){
+	        highScore = normalModeHighScore;
+	    }
 	}
 
-	private void saveHighScore(int score) { // 최고 기록을 파일에 저장하는 메서드
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter(HIGH_SCORE_FILE))) {
-			writer.write(String.valueOf(score));
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+
+	// 최고 기록 저장
+	private void saveHighScores() {
+		System.out.println("기록 저장");
+	    try (BufferedWriter writer = new BufferedWriter(new FileWriter(HIGH_SCORE_FILE))) {
+	        writer.write(String.valueOf(normalModeHighScore));
+	        writer.newLine();
+	        writer.write(String.valueOf(attackModeHighScore));
+	        writer.newLine();
+	        writer.write(String.valueOf(bugModeHighScore));
+	    } catch (IOException e) {
+	        e.printStackTrace();
+	    }
 	}
-	
-	private void checkAndSaveHighScore() { // 최고기록 갱신
-		if (Score > highScore) {
-			highScore = Score;
-			saveHighScore(highScore);
-		}
+
+
+	// 모드별 최고 기록 갱신 후 저장
+	private void checkAndSaveHighScore(int score) {
+		System.out.println("최고기록 갱신 체크..");
+	    loadHighScores(); // 파일에서 최고 기록을 불러옵니다.
+	    if (attackModeOnOff && score > attackModeHighScore) {
+	        attackModeHighScore = score;
+	        saveHighScores(); // 최고 기록을 파일에 저장합니다.
+	    } else if (bugModOnOff && score > bugModeHighScore) {
+	        bugModeHighScore = score;
+	        saveHighScores(); // 최고 기록을 파일에 저장합니다.
+	    } else if (!attackModeOnOff && !bugModOnOff && score > normalModeHighScore) {
+	        normalModeHighScore = score;
+	        saveHighScores(); // 최고 기록을 파일에 저장합니다.
+	    }
 	}
+
+
 
 	private void fillBlockBag() { // 블록 가방 채우는 메서드
 		blockBag.clear();
@@ -511,7 +504,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 			g.setFont(new Font("Arial", Font.PLAIN, 20));
 			g.drawString("tetris: " + tetrisCount, getWidth() / 2 - 40, getHeight() / 2 + 70);
 			}
-			checkAndSaveHighScore(); // 최고 기록 갱신 여부 확인 및 저장
+			checkAndSaveHighScore(Score); // 최고 기록 갱신 여부 확인 및 저장
 			restartButton.setVisible(true); // 게임 오버 시 버튼 표시
 			restartButton.setBounds(getWidth() / 2 - 40, getHeight() / 2 - 20, 100, 40);
 		} else {
@@ -519,38 +512,40 @@ public class TetrisPanel extends JPanel implements Runnable {
 		}
 		
 		//=============================================================================================    엠블럼 추가
-				if (highScore >= 100 || Score >= 100) {
-					try {
-						score100Image = ImageIO.read(new File("./src/images/score100.png"));
-					} catch (IOException e) {
-						e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+				if(!attackModeOnOff && ! bugModOnOff) {
+							if (highScore >= 100 || Score >= 100) {
+						try {
+							score100Image = ImageIO.read(new File("./src/images/score100.png"));
+						} catch (IOException e) {
+							e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+						}
 					}
-				}
-				if (score100Image != null) { g.drawImage(score100Image, 30, 260, 120, 120, this); }
-				
-				if (highScore >= 300 || Score >= 300) {
-					try {
-						score300Image = ImageIO.read(new File("./src/images/score300.png"));
-					} catch (IOException e) {
-						e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+					if (score100Image != null) { g.drawImage(score100Image, 30, 260, 120, 120, this); }
+					
+					if (highScore >= 300 || Score >= 300) {
+						try {
+							score300Image = ImageIO.read(new File("./src/images/score300.png"));
+						} catch (IOException e) {
+							e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+						}
 					}
-				}
-				if (score300Image != null) { g.drawImage(score300Image, 30, 380, 120, 120, this); }
-				
-				if (highScore >= 500 || Score >= 500) {
-					try {
-						score500Image = ImageIO.read(new File("./src/images/score500.png"));
-					} catch (IOException e) {
-						e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+					if (score300Image != null) { g.drawImage(score300Image, 30, 380, 120, 120, this); }
+					
+					if (highScore >= 500 || Score >= 500) {
+						try {
+							score500Image = ImageIO.read(new File("./src/images/score500.png"));
+						} catch (IOException e) {
+							e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+						}
 					}
-				}
-				if (score500Image != null) { g.drawImage(score500Image, 30, 500, 120, 120, this); }
-				
-				if (highScore >= 1000 || Score >= 1000) {
-					try {
-						score1000Image = ImageIO.read(new File("./src/images/score1000.png"));
-					} catch (IOException e) {
-						e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+					if (score500Image != null) { g.drawImage(score500Image, 30, 500, 120, 120, this); }
+					
+					if (highScore >= 1000 || Score >= 1000) {
+						try {
+							score1000Image = ImageIO.read(new File("./src/images/score1000.png"));
+						} catch (IOException e) {
+							e.printStackTrace(); // 이미지 로드 실패 시 예외 처리
+						}
 					}
 				}
 				if (score1000Image != null) { g.drawImage(score1000Image, 30, 620, 120, 120, this); }
@@ -579,9 +574,9 @@ public class TetrisPanel extends JPanel implements Runnable {
 		}
 	}
 
-	// 공격 발생 함수
+	// 공격 발생
 	void attackline() {
-		if (attackModeOnOff) { //어택모드가 켜져있다면
+		if (attackModeOnOff) { 
 			for (int i = 0; i < row - 1; i++) {// 가로 조회
 				System.arraycopy(grid[i + 1], 0, grid[i], 0, col); // 그리드 좌표 이동
 				System.arraycopy(colors[i + 1], 0, colors[i], 0, col); // 색상 배열도 같이 이동
@@ -735,7 +730,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 		if (!canMove(nowBlockY, nowBlockX)) {//더이상 움직일 수 없으면
 			// 게임 오버 로직
 			gameOver = true; // 게임 오버 상태 설정
-			// running = false; // 게임 오버 시 스레드 종료 (선택 사항)
+			running = false; // 게임 오버 시 스레드 종료 (선택 사항)
 			System.out.println("Game Over!");
 		}
 	}
@@ -1108,6 +1103,7 @@ public class TetrisPanel extends JPanel implements Runnable {
 			}
 		}
 	}
+
 
 	// 게임 재시작 메서드
 	private void restartGame() {
